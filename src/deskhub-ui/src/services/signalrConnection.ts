@@ -1,5 +1,5 @@
 import { HttpTransportType, HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr'
-import { useDashboardStore } from '../store/useDashboardStore'
+import { useDashboardStore, type ConnectionStatus } from '../store/useDashboardStore'
 import type { DashboardSnapshot, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
 
 // Имена событий — зеркало src/DeskHub.Api/Hubs/HubEvents.cs
@@ -12,6 +12,8 @@ export const HubEvents = {
 const HUB_URL = '/hubs/dashboard'
 const SNAPSHOT_URL = '/api/dashboard/snapshot'
 const MAX_RETRY_DELAY_MS = 30_000
+// Страховка для режима 24/7: если связь не восстановилась за это время — перезагрузить страницу
+const RELOAD_AFTER_DISCONNECT_MS = 10 * 60_000
 
 // Экспоненциальная задержка 1 → 2 → 4 … → 30 с + джиттер. Никогда не сдаёмся (киоск 24/7).
 const retryDelay = (attempt: number) =>
@@ -26,6 +28,23 @@ const connection = new HubConnectionBuilder()
   .build()
 
 const store = () => useDashboardStore.getState()
+
+let reloadTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Обновляет статус в сторе и ведёт watchdog: таймер перезагрузки идёт, пока нет подключения. */
+function setStatus(status: ConnectionStatus): void {
+  store().setConnectionStatus(status)
+
+  if (status === 'connected') {
+    clearTimeout(reloadTimer)
+    reloadTimer = undefined
+  } else if (reloadTimer === undefined) {
+    reloadTimer = setTimeout(() => {
+      console.warn(`[signalr] no connection for ${RELOAD_AFTER_DISCONNECT_MS / 60_000} min, reloading page`)
+      window.location.reload()
+    }, RELOAD_AFTER_DISCONNECT_MS)
+  }
+}
 
 async function loadSnapshot(): Promise<void> {
   try {
@@ -43,15 +62,15 @@ function bindEvents(): void {
   connection.on(HubEvents.TrafficUpdated, (traffic: TrafficModel[]) => store().setTraffic(traffic))
   connection.on(HubEvents.TelemetryTick, (telemetry: TelemetryModel) => store().setTelemetry(telemetry))
 
-  connection.onreconnecting(() => store().setConnectionStatus('reconnecting'))
+  connection.onreconnecting(() => setStatus('reconnecting'))
   connection.onreconnected(() => {
-    store().setConnectionStatus('connected')
+    setStatus('connected')
     void loadSnapshot() // закрыть «дыру» в данных за время обрыва
   })
   // onclose после withAutomaticReconnect срабатывает, только если реконнект прерван —
   // перезапускаем подключение вручную, чтобы киоск не остался без связи.
   connection.onclose(() => {
-    store().setConnectionStatus('disconnected')
+    setStatus('disconnected')
     void startWithRetry()
   })
 }
@@ -59,13 +78,13 @@ function bindEvents(): void {
 // withAutomaticReconnect не покрывает первый start() — его ретраи делаем сами.
 async function startWithRetry(attempt = 0): Promise<void> {
   if (connection.state !== HubConnectionState.Disconnected) return
-  store().setConnectionStatus('connecting')
+  setStatus('connecting')
   try {
     await connection.start()
-    store().setConnectionStatus('connected')
+    setStatus('connected')
     await loadSnapshot()
   } catch (error) {
-    store().setConnectionStatus('disconnected')
+    setStatus('disconnected')
     console.warn(`[signalr] start failed (attempt ${attempt + 1})`, error)
     setTimeout(() => void startWithRetry(attempt + 1), retryDelay(attempt))
   }

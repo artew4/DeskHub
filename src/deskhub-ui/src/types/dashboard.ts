@@ -21,7 +21,8 @@ export interface TelemetryModel {
   cpuPercent: number
   ramUsedMb: number
   ramTotalMb: number
-  temperatureC: number
+  temperatureC: number | null
+  uptimeSeconds: number
   timestamp: string
 }
 

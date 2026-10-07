@@ -226,6 +226,8 @@ public static CongestionLevel Classify(double ratio) => ratio switch
 
 ### 5.2. Читатель телеметрии
 
+> **Текущая реализация:** `Workers/TelemetryWorker.cs` + `Services/Telemetry/` (`ITelemetryReader`, `LinuxTelemetryReader`, `MockTelemetryReader`, `TelemetryOptions`). Реализация выбирается в `Program.cs` через `RuntimeInformation.IsOSPlatform(OSPlatform.Linux)`: на Linux — чтение procfs/sysfs, на macOS/Windows — мок (CPU 5–35 % с редкими пиками, RAM ~2–2.8 ГБ из 8064 МБ, температура 45–55 °C, аптайм = `Environment.TickCount64`). Если файла температуры нет (например, VM Docker Desktop) — `temperatureC = null`. Воркер логирует только первый сбой серии и восстановление, чтобы не писать ошибку каждую секунду. Троттлинг, частота CPU и по-ядерная загрузка пока не собираются.
+
 ```csharp
 public sealed class LinuxTelemetryReader(IOptions<TelemetryOptions> opt) : ITelemetryReader
 {

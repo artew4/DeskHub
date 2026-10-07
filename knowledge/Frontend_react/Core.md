@@ -49,16 +49,18 @@ src/deskhub-ui/
 
 ### 1.1. Текущее состояние (Core Communication Layer)
 
-Дерево выше — **целевая** структура. Сейчас реализован только слой связи, в упрощённой раскладке:
+Дерево выше — **целевая** структура. Сейчас реализованы слой связи и первый виджет; общие модули пока лежат в упрощённой раскладке:
 
 | Файл | Роль | Целевое место |
 |---|---|---|
 | `src/types/dashboard.ts` | TS-зеркало C#-моделей (`WeatherModel`, `TrafficModel`, `TelemetryModel`, `DashboardSnapshot`) | `shared/api/types.ts` |
 | `src/store/useDashboardStore.ts` | Единый Zustand-стор: `weather`, `traffic`, `telemetry`, `connectionStatus`, `isConnected` + экшены `setWeather/setTraffic/setTelemetry/applySnapshot/setConnectionStatus` | `shared/store/` + слайсы фич |
 | `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
-| `src/App.tsx` | Вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
+| `src/App.tsx` | Корень 1024×600 (`p-4`), вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
+| `src/features/dashboard/DashboardScreen.tsx` | Сетка 12×6 (`gap-3`); пока размещён только виджет телеметрии (кол. 8–12, стр. 4–6) | на месте |
+| `src/features/telemetry/` | `TelemetryWidget.tsx` (карточка) + `telemetry.mappers.ts` (пороги, форматирование аптайма) | на месте |
 
-Перенос в целевую структуру — при появлении первых фич-виджетов; одновременно стор разбивается на слайсы (раздел 3.2). Уже есть: бесконечный реконнект, ретраи первого `start()`, snapshot после (пере)подключения, повторная попытка по событию `online`. Пока нет: защиты от устаревших push-сообщений по `updatedAt` (5.4) и watchdog с `location.reload()` (5.3).
+Перенос в целевую структуру — при появлении первых фич-виджетов; одновременно стор разбивается на слайсы (раздел 3.2). Реализовано: бесконечный реконнект, ретраи первого `start()`, snapshot после (пере)подключения, повторная попытка по событию `online`, watchdog — `location.reload()`, если статус не `connected` 10 минут подряд (5.3; таймер ведёт `setStatus()` в `signalrConnection.ts`), защита от устаревших данных — экшены стора и `applySnapshot` отбрасывают данные со временем старше текущего (`updatedAt`, у телеметрии `timestamp`; для пробок — максимум по маршрутам).
 
 ---
 

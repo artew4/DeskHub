@@ -243,6 +243,8 @@ export interface TrafficDto {
 
 ### 3.2. DTO
 
+> **Текущая реализация** (`src/types/dashboard.ts` ↔ `Models/TelemetryModel.cs`): `TelemetryModel { cpuPercent, ramUsedMb, ramTotalMb, temperatureC: number | null, uptimeSeconds, timestamp }`, событие `TelemetryTick`. История в snapshot, `cpuPerCore`, `throttled`, `cpuFreqMhz` — следующий этап (вместе со спарклайнами). Виджет сейчас: CPU и RAM — число + Tailwind-бар (`scaleX`), температура — число с цветом по порогам, аптайм в заголовке, приглушение + «нет связи» при потере соединения.
+
 ```ts
 export interface TelemetryDto {
   timestamp: string;          // ISO
@@ -309,9 +311,9 @@ export class RingBuffer {
 | Температура | Статус | Цвет |
 |---|---|---|
 | < 60 °C | Норма | `status-ok` |
-| 60–75 °C | Тепло | `status-warn` |
-| 75–85 °C | Горячо | `status-bad` |
-| ≥ 85 °C | Троттлинг | `status-critical` + пульсация `opacity` |
+| 60–80 °C | Тепло | `status-warn` |
+| ≥ 80 °C | Перегрев (близко к троттлингу) | `status-bad` |
+| `null` | Датчик недоступен | `text-fg-muted`, значение «—» |
 
 **Пороги CPU / RAM:** < 70% — норма, 70–90% — `warn`, > 90% — `bad`.
 

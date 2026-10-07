@@ -1,7 +1,10 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DeskHub.Api.Hubs;
-using DeskHub.Api.Models;
+using DeskHub.Api.Services;
+using DeskHub.Api.Services.Telemetry;
+using DeskHub.Api.Workers;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -22,7 +25,20 @@ builder.Services
     .AddJsonProtocol(o => o.PayloadSerializerOptions.Converters.Add(enumConverter));
 
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<DashboardState>();
 builder.Services.AddSingleton<DashboardNotifier>();
+
+// --- Телеметрия: реальные метрики на Linux (Raspberry Pi), мок на macOS/Windows ---
+builder.Services.AddOptions<TelemetryOptions>()
+    .BindConfiguration(TelemetryOptions.SectionName)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+    builder.Services.AddSingleton<ITelemetryReader, LinuxTelemetryReader>();
+else
+    builder.Services.AddSingleton<ITelemetryReader, MockTelemetryReader>();
+
+builder.Services.AddHostedService<TelemetryWorker>();
 
 var app = builder.Build();
 
@@ -42,7 +58,7 @@ app.UseStaticFiles(new StaticFileOptions
 
 app.MapHealthChecks("/health");
 
-app.MapGet("/api/dashboard/snapshot", (TimeProvider time) => StubData.CreateSnapshot(time.GetUtcNow()))
+app.MapGet("/api/dashboard/snapshot", (DashboardState state) => state.GetSnapshot())
     .WithName("GetDashboardSnapshot");
 
 app.MapHub<DashboardHub>("/hubs/dashboard");
