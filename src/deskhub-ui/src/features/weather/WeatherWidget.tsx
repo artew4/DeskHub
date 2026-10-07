@@ -2,7 +2,7 @@ import { Clock, Droplets, MapPin, Sun } from 'lucide-react'
 import { memo } from 'react'
 import { useDashboardStore } from '../../store/useDashboardStore'
 import type { HourlyForecast, WeatherModel } from '../../types/dashboard'
-import { useClock } from '../dashboard/clock/useClock'
+import { useClock } from '../clock/useClock'
 import {
   WEATHER_STALE_AFTER_MS,
   formatHour,

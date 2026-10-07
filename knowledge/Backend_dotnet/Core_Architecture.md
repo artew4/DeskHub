@@ -231,7 +231,7 @@ public sealed record SnapshotDto(
     TrafficDto? Traffic,
     TelemetrySnapshotDto? Telemetry,
     SettingsDto Settings,
-    DateTimeOffset ServerTime);   // клиент сверяет с локальными часами (Feature_Dashboard.md, 3.3)
+    DateTimeOffset ServerTime);   // клиент сверяет с локальными часами (Feature_Dashboard.md, 3.4)
 ```
 
 ### 5.3. DTO
