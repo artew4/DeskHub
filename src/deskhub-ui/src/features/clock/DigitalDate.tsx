@@ -24,12 +24,12 @@ export const DigitalDate = memo(function DigitalDate() {
         {timeFormat.format(now)}
       </time>
 
-      <div className="mt-5 h-px w-10 bg-white/20" />
+      <div className="mt-5 h-px w-10 bg-surface-2" />
 
       <span className="mt-4 text-label font-medium uppercase tracking-[0.3em] text-fg-secondary">
         {weekdayFormat.format(now)}
       </span>
-      <span className="mt-1.5 text-xl font-light tracking-wide text-fg-secondary/80">
+      <span className="mt-1.5 text-xl font-light tracking-wide text-fg-secondary">
         {capitalize(dayMonthFormat.format(now))}
       </span>
     </div>

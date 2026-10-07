@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { handAngles } from './clockMath'
 
 /**
@@ -37,19 +37,15 @@ export const AnalogClock = memo(function AnalogClock({ size }: { size: number })
     <div className="relative shrink-0" style={{ width: size, height: size }} aria-hidden>
       <Dial />
       <Hand ref={hourRef}>
-        {/* Часовая: широкая, сужается к концу */}
-        <path d="M97.4 108 L98.3 52 Q100 48.5 101.7 52 L102.6 108 Z" fill="#ECEEF1" />
+        <line x1="100" y1="108" x2="100" y2="52" strokeWidth="5" strokeLinecap="round" className="stroke-fg-primary" />
       </Hand>
       <Hand ref={minuteRef}>
-        <path d="M98.4 110 L99.2 22 Q100 19.5 100.8 22 L101.6 110 Z" fill="#F5F6F8" />
+        <line x1="100" y1="110" x2="100" y2="24" strokeWidth="3" strokeLinecap="round" className="stroke-fg-primary" />
       </Hand>
       <Hand ref={secondRef}>
-        {/* Секундная: тонкая серебристая с красным кончиком и противовесом */}
-        <line x1="100" y1="122" x2="100" y2="30" stroke="#C9CDD4" strokeWidth="0.8" strokeLinecap="round" />
-        <line x1="100" y1="30" x2="100" y2="14" stroke="#E5484D" strokeWidth="1.1" strokeLinecap="round" />
-        <circle cx="100" cy="119" r="2.6" fill="#C9CDD4" />
-        <circle cx="100" cy="100" r="3.6" fill="#F5F6F8" />
-        <circle cx="100" cy="100" r="1.5" fill="#E5484D" />
+        {/* Секундная — единственный цветной акцент, плоская: линия с коротким хвостом и центральная точка */}
+        <line x1="100" y1="118" x2="100" y2="16" strokeWidth="1.2" strokeLinecap="round" className="stroke-status-bad" />
+        <circle cx="100" cy="100" r="3.5" className="fill-status-bad" />
       </Hand>
     </div>
   )
@@ -68,36 +64,25 @@ function Hand({ ref, children }: { ref: React.Ref<HTMLDivElement>; children: Rea
 
 const MINUTE_TICKS = Array.from({ length: 60 }, (_, i) => i)
 
-/** Статичный циферблат: тонкое кольцо, 60 минутных делений, 12 часовых. Без цифр. */
+/** Статичный плоский циферблат: кольцо-трек, 60 минутных делений, 12 часовых. Без цифр, бликов и градиентов. */
 const Dial = memo(function Dial() {
-  const faceId = useId()
   return (
     <svg viewBox="0 0 200 200" className="absolute inset-0 size-full">
-      <defs>
-        <radialGradient id={faceId} cx="50%" cy="38%" r="65%">
-          <stop offset="0%" stopColor="#FFFFFF" stopOpacity="0.07" />
-          <stop offset="100%" stopColor="#FFFFFF" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      <circle cx="100" cy="100" r="97" fill={`url(#${faceId})`} />
-      <circle cx="100" cy="100" r="97" fill="none" stroke="#FFFFFF" strokeOpacity="0.16" strokeWidth="0.8" />
-      <circle cx="100" cy="100" r="92.5" fill="none" stroke="#FFFFFF" strokeOpacity="0.05" strokeWidth="0.6" />
+      {/* Кольцо — цвет трека прогресс-баров телеметрии */}
+      <circle cx="100" cy="100" r="97" fill="none" strokeWidth="1.5" className="stroke-surface-2" />
 
       {MINUTE_TICKS.map((i) => {
         const isHour = i % 5 === 0
-        const isCardinal = i % 15 === 0
         return (
           <line
             key={i}
             x1="100"
-            y1={isHour ? 8 : 9.5}
+            y1="9"
             x2="100"
-            y2={isCardinal ? 22 : isHour ? 18 : 13}
-            stroke="#FFFFFF"
-            strokeOpacity={isHour ? 0.85 : 0.22}
-            strokeWidth={isCardinal ? 2.2 : isHour ? 1.6 : 0.6}
+            y2={isHour ? 20 : 13}
+            strokeWidth={isHour ? 2 : 1}
             strokeLinecap="round"
+            className={isHour ? 'stroke-fg-muted' : 'stroke-fg-muted/40'}
             transform={`rotate(${i * 6} 100 100)`}
           />
         )
