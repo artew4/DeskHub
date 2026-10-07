@@ -4,7 +4,9 @@ using System.Text.Json.Serialization;
 using DeskHub.Api.Hubs;
 using DeskHub.Api.Services;
 using DeskHub.Api.Services.Telemetry;
+using DeskHub.Api.Services.Weather;
 using DeskHub.Api.Workers;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -39,6 +41,19 @@ else
     builder.Services.AddSingleton<ITelemetryReader, MockTelemetryReader>();
 
 builder.Services.AddHostedService<TelemetryWorker>();
+
+// --- Погода: Open-Meteo (без ключа) ---
+builder.Services.AddOptions<OpenMeteoOptions>()
+    .BindConfiguration(OpenMeteoOptions.SectionName)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddHttpClient(OpenMeteoOptions.HttpClientName, (sp, client) =>
+{
+    client.BaseAddress = new Uri(sp.GetRequiredService<IOptions<OpenMeteoOptions>>().Value.BaseUrl);
+    client.Timeout = TimeSpan.FromSeconds(20);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("DeskHub/1.0");
+});
+builder.Services.AddHostedService<WeatherWorker>();
 
 var app = builder.Build();
 

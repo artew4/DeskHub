@@ -8,8 +8,8 @@ namespace DeskHub.Api.Services;
 /// </summary>
 public sealed class DashboardState(TimeProvider time)
 {
-    // Погода и пробки — заглушки, пока нет соответствующих воркеров
-    private volatile WeatherModel? _weather = StubData.Weather(time.GetUtcNow());
+    // Погода — от WeatherWorker (null до первого успешного запроса); пробки — заглушка до TrafficWorker
+    private volatile WeatherModel? _weather;
     private volatile IReadOnlyList<TrafficModel> _traffic = StubData.Traffic(time.GetUtcNow());
     private volatile TelemetryModel? _telemetry;
 

@@ -194,7 +194,7 @@ builder.Services
 
 Singleton, хранящий **последнее известное значение** каждого виджета и кольцевой буфер истории телеметрии (120 точек).
 
-> **Текущая реализация** (`Services/DashboardState.cs`): хранит последние `WeatherModel`, `TrafficModel[]`, `TelemetryModel`; погода и пробки инициализируются заглушками из `StubData` (время = старт приложения), телеметрия — реальная от `TelemetryWorker`. Обновляется только через `DashboardNotifier`. Кольцевой буфер истории ещё не реализован. Важно: snapshot не должен генерировать данные «на лету» с текущим временем — иначе при реконнекте он затрёт более свежие push-данные несмотря на проверку `updatedAt` на клиенте.
+> **Текущая реализация** (`Services/DashboardState.cs`): хранит последние `WeatherModel`, `TrafficModel[]`, `TelemetryModel`; пробки инициализируются заглушкой из `StubData` (время = старт приложения); погода — `null` до первого ответа `WeatherWorker`; телеметрия — от `TelemetryWorker`. Обновляется только через `DashboardNotifier`. Кольцевой буфер истории ещё не реализован. Важно: snapshot не должен генерировать данные «на лету» с текущим временем — иначе при реконнекте он затрёт более свежие push-данные несмотря на проверку `updatedAt` на клиенте.
 
 ```csharp
 public sealed class DashboardState
@@ -310,7 +310,7 @@ builder.Services.AddProblemDetails();
 ```json
 {
   "ConnectionStrings": { "DefaultConnection": "Host=postgres;Port=5432;Database=deskhub;Username=deskhub;Password=<из env>" },
-  "OpenMeteo": { "Latitude": 55.75, "Longitude": 37.62, "LocationName": "Москва", "IntervalMinutes": 15 },
+  "OpenMeteo": { "Latitude": 55.7558, "Longitude": 37.6173, "LocationName": "Москва", "IntervalMinutes": 15 },
   "Traffic":   { "Provider": "TomTom", "ApiKey": "<из env>", "IntervalMinutes": 5, "PeakIntervalMinutes": 2,
                  "PeakHours": ["07:00-10:00", "17:00-20:00"] },
   "Telemetry": { "IntervalSeconds": 1, "ProcRoot": "/proc", "SysRoot": "/sys" },

@@ -57,7 +57,9 @@ src/deskhub-ui/
 | `src/store/useDashboardStore.ts` | Единый Zustand-стор: `weather`, `traffic`, `telemetry`, `connectionStatus`, `isConnected` + экшены `setWeather/setTraffic/setTelemetry/applySnapshot/setConnectionStatus` | `shared/store/` + слайсы фич |
 | `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
 | `src/App.tsx` | Корень 1024×600 (`p-4`), вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
-| `src/features/dashboard/DashboardScreen.tsx` | Сетка 12×6 (`gap-3`); пока размещён только виджет телеметрии (кол. 8–12, стр. 4–6) | на месте |
+| `src/features/dashboard/DashboardScreen.tsx` | Сетка 12×6 (`gap-3`); погода (кол. 8–12, стр. 1–3) и телеметрия (кол. 8–12, стр. 4–6) | на месте |
+| `src/features/weather/` | `WeatherWidget.tsx`, `weather.mappers.ts` (температура с U+2212, УФ-шкала, фильтр часов), `weatherIcons.tsx` (ключ иконки → lucide) | на месте |
+| `src/features/dashboard/clock/useClock.ts` | Время, выровненное по границе секунды/минуты (используется погодой; будущие часы) | на месте |
 | `src/features/telemetry/` | `TelemetryWidget.tsx` (карточка) + `telemetry.mappers.ts` (пороги, форматирование аптайма) | на месте |
 
 Перенос в целевую структуру — при появлении первых фич-виджетов; одновременно стор разбивается на слайсы (раздел 3.2). Реализовано: бесконечный реконнект, ретраи первого `start()`, snapshot после (пере)подключения, повторная попытка по событию `online`, watchdog — `location.reload()`, если статус не `connected` 10 минут подряд (5.3; таймер ведёт `setStatus()` в `signalrConnection.ts`), защита от устаревших данных — экшены стора и `applySnapshot` отбрасывают данные со временем старше текущего (`updatedAt`, у телеметрии `timestamp`; для пробок — максимум по маршрутам).

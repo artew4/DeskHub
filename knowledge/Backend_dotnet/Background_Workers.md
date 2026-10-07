@@ -103,6 +103,13 @@ public abstract class PeriodicWorker(ILogger logger, TimeProvider time) : Backgr
 
 ### 3.2. Запрос к Open-Meteo
 
+> **Текущая реализация:** `Workers/WeatherWorker.cs` + `Services/Weather/` (`OpenMeteoOptions`, `OpenMeteoResponse`, `OpenMeteoMapper`, `WeatherCodes`). Отличия от описания ниже:
+> - `timezone=auto` (а не `UTC`): локальные времена ответа переводятся в `DateTimeOffset` по `utc_offset_seconds`, в DTO уходят со смещением (`2026-10-07T21:00:00+03:00`).
+> - Поля запроса: `current=temperature_2m,apparent_temperature,weather_code,precipitation,is_day,uv_index`, `hourly=temperature_2m,weather_code,is_day,precipitation_probability`, `forecast_days=2`; `daily` и ветер пока не запрашиваются.
+> - Named `HttpClient` `"OpenMeteo"` (таймаут 20 с) без `AddStandardResilienceHandler`; вместо него — повтор в самом воркере: 1 → 2 → 4 … мин, но не дольше интервала опроса. Первая итерация — сразу при старте.
+> - В БД (`weather_logs`) пока не пишется — до этапа EF Core; до первого успешного запроса `weather` в snapshot = `null`.
+> - WMO-код → описание и **ключ иконки** (`clear-day`, `clear-night`, `partly-cloudy-day/night`, `cloudy`, `fog`, `drizzle`, `rain`, `sleet`, `snow`, `thunderstorm`) считает бэкенд (`WeatherCodes.cs`); фронтенд только сопоставляет ключ с иконкой lucide.
+
 API бесплатный, **без ключа**, лимиты с запасом для одного устройства.
 
 ```

@@ -2,10 +2,27 @@
 // Даты приходят строками ISO 8601 (UTC), enum — строками в camelCase.
 
 export interface WeatherModel {
+  locationName: string
   temperature: number
+  apparentTemperature: number
+  weatherCode: number
   description: string
+  /** Ключ иконки — см. src/features/weather/weatherIcons.ts */
   icon: string
+  isDay: boolean
+  precipitation: number
+  uvIndex: number
+  hourly: HourlyForecast[]
   updatedAt: string
+}
+
+export interface HourlyForecast {
+  /** Начало часа, ISO со смещением часового пояса места */
+  time: string
+  temperature: number
+  weatherCode: number
+  icon: string
+  precipitationProbability: number
 }
 
 export type CongestionLevel = 'free' | 'moderate' | 'heavy' | 'severe'

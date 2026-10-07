@@ -18,9 +18,9 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       TZ: ${TZ:-Europe/Moscow}
       ConnectionStrings__DefaultConnection: ${ConnectionStrings__DefaultConnection:?set in .env}
-      OpenMeteo__Latitude: ${OpenMeteo__Latitude}
-      OpenMeteo__Longitude: ${OpenMeteo__Longitude}
-      OpenMeteo__LocationName: ${OpenMeteo__LocationName}
+      OpenMeteo__Latitude: ${OpenMeteo__Latitude:-55.7558}
+      OpenMeteo__Longitude: ${OpenMeteo__Longitude:-37.6173}
+      OpenMeteo__LocationName: ${OpenMeteo__LocationName:-Москва}
       OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
       Traffic__Provider: ${Traffic__Provider:-TomTom}
       Traffic__ApiKey: ${Traffic__ApiKey:-}

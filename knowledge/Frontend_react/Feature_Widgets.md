@@ -65,6 +65,8 @@ REST snapshot (старт / реконнект) ──────────�
 
 ### 1.2. DTO
 
+> **Текущая реализация** (`src/types/dashboard.ts` ↔ `Models/WeatherModel.cs`): `WeatherModel { locationName, temperature, apparentTemperature, weatherCode, description, icon, isDay, precipitation, uvIndex, hourly: HourlyForecast[], updatedAt }`, `HourlyForecast { time, temperature, weatherCode, icon, precipitationProbability }` (24 ч от текущего часа). Нет пока `daily`, ветра и вероятности осадков на текущий час. Виджет: `src/features/weather/` (`WeatherWidget.tsx`, `weather.mappers.ts`, `weatherIcons.tsx`), ячейка 8–12 × 1–3; 5 ближайших часов со следующего полного; УФ только днём; вероятность осадков в часе — при ≥ 30 %; устаревание > 30 мин → приглушение + «N мин назад»; скелетон до первых данных.
+
 ```ts
 export interface WeatherDto {
   updatedAt: string;               // ISO UTC — когда бэкенд получил данные
