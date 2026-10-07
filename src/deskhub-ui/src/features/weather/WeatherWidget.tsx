@@ -9,7 +9,7 @@ import {
   formatPrecipitation,
   formatTemperature,
   minutesSince,
-  upcomingHours,
+  selectForecast,
   uvCategory,
 } from './weather.mappers'
 import { WeatherIcon } from './weatherIcons'
@@ -30,7 +30,7 @@ export const WeatherWidget = memo(function WeatherWidget() {
 
 function WeatherContent({ weather, now }: { weather: WeatherModel; now: Date }) {
   const isStale = now.getTime() - Date.parse(weather.updatedAt) > WEATHER_STALE_AFTER_MS
-  const hours = upcomingHours(weather.hourly, now, HOURLY_COUNT)
+  const forecast = selectForecast(weather.hourly, now, HOURLY_COUNT)
   const uv = uvCategory(weather.uvIndex)
 
   return (
@@ -74,11 +74,19 @@ function WeatherContent({ weather, now }: { weather: WeatherModel; now: Date }) 
         </dl>
       </div>
 
-      <ul className="mt-3 flex justify-between border-t border-surface-2 pt-3">
-        {hours.map((hour) => (
-          <HourItem key={hour.time} hour={hour} />
-        ))}
-      </ul>
+      <div className="mt-3 border-t border-surface-2 pt-2">
+        <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-muted">{forecast.title}</h3>
+        {forecast.hours.length > 0 ? (
+          // Если часов меньше 5 (поздний вечер, неполные данные) — распределяем равномерно, а не по краям
+          <ul className={`flex ${forecast.hours.length === HOURLY_COUNT ? 'justify-between' : 'justify-around'}`}>
+            {forecast.hours.map((hour) => (
+              <HourItem key={hour.time} hour={hour} />
+            ))}
+          </ul>
+        ) : (
+          <p className="flex h-[76px] items-center justify-center text-label text-fg-muted">Нет прогноза</p>
+        )}
+      </div>
     </div>
   )
 }
@@ -113,7 +121,7 @@ function WeatherSkeleton() {
           <div className="h-3.5 w-16 rounded bg-surface-2" />
         </div>
       </div>
-      <div className="mt-3 flex justify-between border-t border-surface-2 pt-3">
+      <div className="mt-3 flex justify-between border-t border-surface-2 pt-[30px]">
         {Array.from({ length: HOURLY_COUNT }, (_, i) => (
           <div key={i} className="h-[76px] w-14 rounded-lg bg-surface-2" />
         ))}

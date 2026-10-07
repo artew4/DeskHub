@@ -65,7 +65,7 @@ REST snapshot (старт / реконнект) ──────────�
 
 ### 1.2. DTO
 
-> **Текущая реализация** (`src/types/dashboard.ts` ↔ `Models/WeatherModel.cs`): `WeatherModel { locationName, temperature, apparentTemperature, weatherCode, description, icon, isDay, precipitation, uvIndex, hourly: HourlyForecast[], updatedAt }`, `HourlyForecast { time, temperature, weatherCode, icon, precipitationProbability }` (24 ч от текущего часа). Нет пока `daily`, ветра и вероятности осадков на текущий час. Виджет: `src/features/weather/` (`WeatherWidget.tsx`, `weather.mappers.ts`, `weatherIcons.tsx`), ячейка 8–12 × 1–3; 5 ближайших часов со следующего полного; УФ только днём; вероятность осадков в часе — при ≥ 30 %; устаревание > 30 мин → приглушение + «N мин назад»; скелетон до первых данных.
+> **Текущая реализация** (`src/types/dashboard.ts` ↔ `Models/WeatherModel.cs`): `WeatherModel { locationName, temperature, apparentTemperature, weatherCode, description, icon, isDay, precipitation, uvIndex, hourly: HourlyForecast[], updatedAt }`, `HourlyForecast { time, temperature, weatherCode, icon, precipitationProbability }` (24 ч от текущего часа). Нет пока `daily`, ветра и вероятности осадков на текущий час. Виджет: `src/features/weather/` (`WeatherWidget.tsx`, `weather.mappers.ts`, `weatherIcons.tsx`), ячейка 8–12 × 1–3; почасовой блок зависит от времени суток (см. 1.3.1); УФ только днём; вероятность осадков в часе — при ≥ 30 %; устаревание > 30 мин → приглушение + «N мин назад»; скелетон до первых данных.
 
 ```ts
 export interface WeatherDto {
@@ -125,6 +125,18 @@ export interface WeatherDto {
 | 6–7 | Высокий | `status-warn` |
 | 8–10 | Очень высокий | `status-bad` |
 | 11+ | Экстремальный | фиолетовый |
+
+#### 1.3.1. Почасовой блок по времени суток
+
+До 5 слотов, выбор — чистая функция `selectForecast(hourly, now)` в `weather.mappers.ts`; пересчитывается раз в минуту (`useClock('minute')`), время — локальное время устройства.
+
+| Время | Заголовок | Окно | Прореживание |
+|---|---|---|---|
+| 08:00–14:59 | «Сегодня» | от следующего часа до 23:00 сегодня | шаг 3 ч, при нехватке слотов — 2 ч, затем 1 ч; если слотов меньше 5, последним добавляется конец окна (11:30 → 12, 15, 18, 21, 23) |
+| 15:00–22:59 | «Вечером» | от следующего часа до 01:00 следующих суток | шаг 2 ч, затем 1 ч. После ~21:00 слотов меньше 5 (22:30 → 23, 00, 01) — окно ограничено 01:00 |
+| 23:00–07:59 | «Завтра» | ближайший день: в 23:xx — следующая дата, после полуночи — текущая | фиксированные часы 09, 12, 15, 18, 21 |
+
+Fallback: недостающие часы пропускаются; если в окне нет ни одного часа — показываются ближайшие доступные с заголовком «Далее»; пустой массив — «Нет прогноза». При < 5 слотах строка выравнивается `justify-around`. Данных хватает: бэкенд шлёт 24 ч от текущего часа, что покрывает «Завтра» до 21:00 даже из 23:xx.
 
 ### 1.4. Детальный экран
 
