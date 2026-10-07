@@ -54,10 +54,13 @@ src/deskhub-ui/
 | Файл | Роль | Целевое место |
 |---|---|---|
 | `src/types/dashboard.ts` | TS-зеркало C#-моделей (`WeatherModel`, `TrafficModel`, `TelemetryModel`, `DashboardSnapshot`) | `shared/api/types.ts` |
-| `src/store/useDashboardStore.ts` | Единый Zustand-стор: `weather`, `traffic`, `telemetry`, `connectionStatus`, `isConnected` + экшены `setWeather/setTraffic/setTelemetry/applySnapshot/setConnectionStatus` | `shared/store/` + слайсы фич |
+| `src/store/useDashboardStore.ts` | Единый Zustand-стор: `weather`, `traffic`, `telemetry`, `connectionStatus`, `isConnected`, `activeScreenIndex` + экшены `setWeather/setTraffic/setTelemetry/applySnapshot/setConnectionStatus`, навигация `setScreen/nextScreen/prevScreen/registerActivity` и таймер автовозврата (30 с) | `shared/store/` + слайсы фич |
 | `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
-| `src/App.tsx` | Корень 1024×600 (`p-4`), вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
-| `src/features/dashboard/DashboardScreen.tsx` | Сетка 12×6 (`gap-3`); часы (кол. 1–7, стр. 1–3), пробки (кол. 1–7, стр. 4–6), погода (кол. 8–12, стр. 1–3), телеметрия (кол. 8–12, стр. 4–6) — все ячейки заняты | на месте |
+| `src/App.tsx` | Корень 1024×600 (без отступа — `p-4` внутри экранов), `ScreenCarousel` с `MainScreen` + `SystemScreen`; вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
+| `src/components/ScreenCarousel.tsx` | Карусель экранов: CSS `translate3d` + Pointer Events, свайп за пальцем через ref, порог 100 px, индикатор экранов (`Feature_Dashboard.md`, 8.2) | `app/` |
+| `src/features/dashboard/MainScreen.tsx` | Главный экран, сетка 12×6 (`gap-3 p-4`): часы (кол. 1–7, стр. 1–3), пробки (кол. 1–7, стр. 4–6), погода (кол. 8–12, стр. 1–3), календарь (кол. 8–12, стр. 4–6) | на месте |
+| `src/features/dashboard/SystemScreen.tsx` | Системный экран: заголовок «Система» + подсказка, телеметрия (кол. 1–5, стр. 2–4) | на месте |
+| `src/features/calendar/` | `CalendarWidget.tsx` + `calendar.ts` (сетка месяца на `Date`, неделя с Пн, заголовок «Октябрь 2026») | на месте |
 | `src/features/weather/` | `WeatherWidget.tsx`, `weather.mappers.ts` (температура с U+2212, УФ-шкала, фильтр часов), `weatherIcons.tsx` (ключ иконки → lucide) | на месте |
 | `src/features/clock/` | `ClockWidget.tsx`, `AnalogClock.tsx` (rAF + useRef, 60 FPS без ре-рендеров), `DigitalDate.tsx`, `clockMath.ts`, `useClock.ts` (время, выровненное по секунде/минуте; используется и погодой) | на месте |
 | `src/features/traffic/` | `TrafficWidget.tsx`, `RouteMap.tsx` (SVG-схема ТТК vs МКАД), `traffic.mappers.ts` (цвета загруженности, формат длительности, самый быстрый маршрут) | на месте |
@@ -69,40 +72,42 @@ src/deskhub-ui/
 
 ## 2. Навигация и роутинг
 
-### 2.1. Решение: SPA на одном экране, без React Router
+### 2.1. Решение: карусель экранов без React Router
 
-DeskHub — kiosk с **одним основным экраном** (Live Dashboard). Адресной строки нет, история браузера не нужна, deep-linking бессмысленен. Поэтому:
+DeskHub — kiosk: адресной строки нет, история браузера и deep-linking не нужны. Поэтому:
 
-- **React Router не используется.** URL всегда `/`.
-- Переключение «экранов» реализуется **через состояние** (`ui.activeScreen` в сторе) и условный рендер.
-- Бэкенд всё равно настраивает `MapFallbackToFile("index.html")` — на случай ручного захода по произвольному пути.
+- **React Router не используется.** URL всегда `/`; бэкенд всё равно отдаёт `index.html` на любой путь (`MapFallbackToFile`).
+- Экраны — **горизонтальная карусель** (`src/components/ScreenCarousel.tsx`), переключение свайпом. Активный экран — `activeScreenIndex` в сторе.
 
 ### 2.2. Модель экранов
 
 ```ts
-type ScreenId = 'dashboard' | 'details' | 'settings';
+export const SCREEN_COUNT = 2          // 0 — главный (MainScreen), 1 — системный (SystemScreen)
+export const MAIN_SCREEN = 0
+export const IDLE_RETURN_MS = 30_000
 
-interface UiSlice {
-  activeScreen: ScreenId;
-  detailsTarget?: 'weather' | 'traffic' | 'telemetry';
-  openScreen: (id: ScreenId, target?: UiSlice['detailsTarget']) => void;
-  goHome: () => void;
+interface NavigationState {
+  activeScreenIndex: number
+  setScreen: (index: number) => void    // с ограничением 0…SCREEN_COUNT − 1, (пере)запускает таймер автовозврата
+  nextScreen: () => void
+  prevScreen: () => void
+  registerActivity: () => void          // любое касание — сброс таймера
 }
 ```
 
-| Экран | Назначение | Как попасть |
+| Экран | Индекс | Как попасть |
 |---|---|---|
-| `dashboard` | Главный экран (по умолчанию) | Старт / авто-возврат |
-| `details` | Развёрнутый вид одного виджета (например, прогноз на 24 ч) | Тап по карточке виджета |
-| `settings` | Служебный экран (яркость, перезагрузка соединения, версия) | Долгое нажатие (≥ 1.5 с) на часы |
+| Главный (`MainScreen`) | 0 | Старт; свайп вправо с системного; автовозврат |
+| Системный (`SystemScreen`) | 1 | Свайп влево с главного |
+
+Новый экран: добавить компонент в `<ScreenCarousel>` в `App.tsx` и увеличить `SCREEN_COUNT`.
 
 ### 2.3. Правила
 
-- **Авто-возврат:** любой экран, кроме `dashboard`, возвращается на главный через **30 с бездействия** (хук `useIdleReturn`).
-- Переходы — анимация `opacity` + `translate`/`scale` ≤ 250 мс.
-- Экраны, не являющиеся активными, **размонтируются** (а не прячутся через `display:none`), кроме `dashboard`, который остаётся смонтированным, чтобы Canvas-графики не теряли историю. Альтернатива — история хранится в сторе, а не в компоненте (предпочтительно).
-
----
+- **Автовозврат:** любой экран, кроме главного, возвращается на него через **30 с без касаний**. Таймер в модуле стора, сбрасывается `registerActivity()` из `onPointerDownCapture` корня карусели (`Feature_Dashboard.md`, 8.3).
+- **Переход** — только `transform` (CSS-переход 500 мс `ease-kiosk`); во время свайпа трек следует за пальцем через прямую запись в `style.transform` по ref, без ре-рендеров (`Feature_Dashboard.md`, 8.2).
+- **Оба экрана смонтированы постоянно** — виджеты не теряют состояние и подписки; неактивный экран `inert` + `aria-hidden`.
+- Корень карусели — `touch-action: none` (иначе Chromium отдаст горизонтальный жест браузерному панорамированию и пришлёт `pointercancel`).
 
 ## 3. Управление состоянием
 

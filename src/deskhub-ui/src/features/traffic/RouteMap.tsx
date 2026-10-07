@@ -15,7 +15,7 @@ import { congestionFill, congestionStroke, formatDuration } from './traffic.mapp
  *                       ╲━━━━━━━━━━━━━━━━━● Дом (Вешняки, юго-восток)
  *                         ш. Энтузиастов
  */
-export const VIEWBOX = { width: 540, height: 216 }
+const VIEWBOX = { width: 540, height: 216 }
 
 const HOME = { x: 440, y: 184 } // Вешняки — восток/юго-восток от центра
 const WORK = { x: 150, y: 30 } // Ак. Королева — север, почти над центром

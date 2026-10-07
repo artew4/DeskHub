@@ -3,6 +3,12 @@ import type { DashboardSnapshot, TelemetryModel, TrafficModel, WeatherModel } fr
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 
+/** Экраны карусели: 0 — главный, 1 — системный. */
+export const SCREEN_COUNT = 2
+export const MAIN_SCREEN = 0
+/** Через сколько без касаний неглавный экран возвращается на главный. */
+export const IDLE_RETURN_MS = 30_000
+
 interface DashboardState {
   weather: WeatherModel | null
   traffic: TrafficModel | null
@@ -12,12 +18,34 @@ interface DashboardState {
   connectionStatus: ConnectionStatus
   isConnected: boolean
 
+  activeScreenIndex: number
+
   setWeather: (weather: WeatherModel) => void
   setTraffic: (traffic: TrafficModel) => void
   setTelemetry: (telemetry: TelemetryModel) => void
   applySnapshot: (snapshot: DashboardSnapshot) => void
   setConnectionStatus: (status: ConnectionStatus) => void
+
+  nextScreen: () => void
+  prevScreen: () => void
+  setScreen: (index: number) => void
+  /** Любое касание экрана: перезапускает таймер автовозврата. */
+  registerActivity: () => void
 }
+
+// ─── Автовозврат на главный экран ──────────────────────────────────────────
+// Таймер живёт вне React: его запускают/сбрасывают экшены навигации и registerActivity().
+let idleTimer: ReturnType<typeof setTimeout> | undefined
+
+function scheduleIdleReturn(index: number): void {
+  clearTimeout(idleTimer)
+  idleTimer = undefined
+  if (index !== MAIN_SCREEN) {
+    idleTimer = setTimeout(() => useDashboardStore.getState().setScreen(MAIN_SCREEN), IDLE_RETURN_MS)
+  }
+}
+
+const clampScreen = (index: number) => Math.min(SCREEN_COUNT - 1, Math.max(0, Math.round(index)))
 
 /**
  * true, если входящие данные не старее текущих. Защита от гонки snapshot ↔ push:
@@ -37,7 +65,7 @@ const acceptTraffic = (incoming: TrafficModel | null, current: TrafficModel | nu
   incoming != null && isNotOlder(incoming.updatedAt, current?.updatedAt)
 
 // Компоненты читают стор только через селекторы: useDashboardStore((s) => s.weather)
-export const useDashboardStore = create<DashboardState>()((set) => ({
+export const useDashboardStore = create<DashboardState>()((set, get) => ({
   weather: null,
   traffic: null,
   telemetry: null,
@@ -61,4 +89,15 @@ export const useDashboardStore = create<DashboardState>()((set) => ({
 
   setConnectionStatus: (connectionStatus) =>
     set({ connectionStatus, isConnected: connectionStatus === 'connected' }),
+
+  activeScreenIndex: MAIN_SCREEN,
+
+  setScreen: (index) => {
+    const activeScreenIndex = clampScreen(index)
+    set({ activeScreenIndex })
+    scheduleIdleReturn(activeScreenIndex)
+  },
+  nextScreen: () => get().setScreen(get().activeScreenIndex + 1),
+  prevScreen: () => get().setScreen(get().activeScreenIndex - 1),
+  registerActivity: () => scheduleIdleReturn(get().activeScreenIndex),
 }))
