@@ -18,10 +18,10 @@ public sealed class DashboardNotifier(IHubContext<DashboardHub> hub, DashboardSt
         return hub.Clients.All.SendAsync(HubEvents.WeatherUpdated, weather, ct);
     }
 
-    public Task SendTrafficUpdate(IReadOnlyList<TrafficModel> routes, CancellationToken ct = default)
+    public Task SendTrafficUpdate(TrafficModel traffic, CancellationToken ct = default)
     {
-        state.SetTraffic(routes);
-        return hub.Clients.All.SendAsync(HubEvents.TrafficUpdated, routes, ct);
+        state.SetTraffic(traffic);
+        return hub.Clients.All.SendAsync(HubEvents.TrafficUpdated, traffic, ct);
     }
 
     public Task SendTelemetryUpdate(TelemetryModel telemetry, CancellationToken ct = default)

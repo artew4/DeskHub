@@ -59,7 +59,7 @@ async function loadSnapshot(): Promise<void> {
 
 function bindEvents(): void {
   connection.on(HubEvents.WeatherUpdated, (weather: WeatherModel) => store().setWeather(weather))
-  connection.on(HubEvents.TrafficUpdated, (traffic: TrafficModel[]) => store().setTraffic(traffic))
+  connection.on(HubEvents.TrafficUpdated, (traffic: TrafficModel) => store().setTraffic(traffic))
   connection.on(HubEvents.TelemetryTick, (telemetry: TelemetryModel) => store().setTelemetry(telemetry))
 
   connection.onreconnecting(() => setStatus('reconnecting'))

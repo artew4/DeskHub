@@ -117,7 +117,7 @@ public sealed class TrafficLog
     public CongestionLevel Congestion { get; set; }     // хранится строкой (HasConversion<string>())
 }
 
-public enum CongestionLevel { Free, Moderate, Heavy, Severe }
+public enum CongestionLevel { Free, Normal, Heavy, Severe }
 ```
 
 - Индекс: `(route_id, measured_at DESC)` — последняя запись по маршруту и выборка истории для baseline.

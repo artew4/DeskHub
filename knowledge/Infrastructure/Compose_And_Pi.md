@@ -50,12 +50,11 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       TZ: ${TZ:-Europe/Moscow}
       ConnectionStrings__DefaultConnection: ${ConnectionStrings__DefaultConnection:?set in .env}
-      OpenMeteo__Latitude: ${OpenMeteo__Latitude}
-      OpenMeteo__Longitude: ${OpenMeteo__Longitude}
-      OpenMeteo__LocationName: ${OpenMeteo__LocationName}
+      OpenMeteo__Latitude: ${OpenMeteo__Latitude:-55.7558}
+      OpenMeteo__Longitude: ${OpenMeteo__Longitude:-37.6173}
+      OpenMeteo__LocationName: ${OpenMeteo__LocationName:-Москва}
       OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
-      Traffic__Provider: ${Traffic__Provider:-TomTom}
-      Traffic__ApiKey: ${Traffic__ApiKey:-}
+      Traffic__Provider: ${Traffic__Provider:-Yandex}   # Yandex | Mock
       Telemetry__ProcRoot: /host/proc
       Telemetry__SysRoot: /host/sys
     volumes:
@@ -118,14 +117,13 @@ POSTGRES_PASSWORD=change-me
 ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=deskhub;Username=deskhub;Password=change-me
 
 # --- Open-Meteo (ключ не нужен) ---
-OpenMeteo__Latitude=55.75
-OpenMeteo__Longitude=37.62
+OpenMeteo__Latitude=55.7558
+OpenMeteo__Longitude=37.6173
 OpenMeteo__LocationName=Москва
 OpenMeteo__IntervalMinutes=15
 
-# --- Пробки ---
-Traffic__Provider=TomTom
-Traffic__ApiKey=
+# --- Пробки: Yandex (веб-версия Яндекс Карт, ключ не нужен) | Mock (генератор для разработки) ---
+Traffic__Provider=Yandex
 ```
 
 Права: `chmod 600 .env`. Синтаксис `${VAR:?…}` прерывает запуск compose, если обязательная переменная не задана.

@@ -22,8 +22,7 @@ services:
       OpenMeteo__Longitude: ${OpenMeteo__Longitude:-37.6173}
       OpenMeteo__LocationName: ${OpenMeteo__LocationName:-Москва}
       OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
-      Traffic__Provider: ${Traffic__Provider:-TomTom}
-      Traffic__ApiKey: ${Traffic__ApiKey:-}
+      Traffic__Provider: ${Traffic__Provider:-Yandex}   # Yandex | Mock
       Telemetry__ProcRoot: /host/proc
       Telemetry__SysRoot: /host/sys
     volumes:

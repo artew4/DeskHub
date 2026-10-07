@@ -37,7 +37,7 @@ DeskHub/                               # корень репозитория
 │   ├── appsettings.json
 │   ├── appsettings.Development.json
 │   ├── Hubs/
-│   ├── Models/                        # DTO: WeatherModel, TrafficModel, TelemetryModel, DashboardSnapshot (+ StubData)
+│   ├── Models/                        # DTO: WeatherModel, TrafficModel/RouteModel, TelemetryModel, DashboardSnapshot
 │   │   └── …                          # по мере роста — перенос в Features/<Name>/
 │   ├── Hubs/
 │   │   ├── DashboardHub.cs            # Hub (без клиентских методов)
@@ -194,7 +194,7 @@ builder.Services
 
 Singleton, хранящий **последнее известное значение** каждого виджета и кольцевой буфер истории телеметрии (120 точек).
 
-> **Текущая реализация** (`Services/DashboardState.cs`): хранит последние `WeatherModel`, `TrafficModel[]`, `TelemetryModel`; пробки инициализируются заглушкой из `StubData` (время = старт приложения); погода — `null` до первого ответа `WeatherWorker`; телеметрия — от `TelemetryWorker`. Обновляется только через `DashboardNotifier`. Кольцевой буфер истории ещё не реализован. Важно: snapshot не должен генерировать данные «на лету» с текущим временем — иначе при реконнекте он затрёт более свежие push-данные несмотря на проверку `updatedAt` на клиенте.
+> **Текущая реализация** (`Services/DashboardState.cs`): хранит последние `WeatherModel`, `TrafficModel`, `TelemetryModel` — все от воркеров (`WeatherWorker`, `TrafficWorker`, `TelemetryWorker`), `null` до первого успешного обновления. Заглушек (`StubData`) больше нет. Обновляется только через `DashboardNotifier`. Кольцевой буфер истории ещё не реализован. Важно: snapshot не должен генерировать данные «на лету» с текущим временем — иначе при реконнекте он затрёт более свежие push-данные несмотря на проверку `updatedAt` на клиенте.
 
 ```csharp
 public sealed class DashboardState
@@ -267,7 +267,7 @@ builder.Services.AddDbContext<DeskHubDbContext>(o => o
 builder.Services.AddHttpClient<IOpenMeteoClient, OpenMeteoClient>(c =>
         c.BaseAddress = new Uri("https://api.open-meteo.com/"))
     .AddStandardResilienceHandler();
-builder.Services.AddHttpClient<ITrafficProvider, TomTomTrafficProvider>()   // реализация выбирается конфигом
+builder.Services.AddHttpClient("YandexMaps", …)   // + ITrafficProvider: YandexHtmlTrafficProvider | MockTrafficProvider по Traffic:Provider
     .AddStandardResilienceHandler();
 
 // --- Состояние и рассылка ---
@@ -311,7 +311,7 @@ builder.Services.AddProblemDetails();
 {
   "ConnectionStrings": { "DefaultConnection": "Host=postgres;Port=5432;Database=deskhub;Username=deskhub;Password=<из env>" },
   "OpenMeteo": { "Latitude": 55.7558, "Longitude": 37.6173, "LocationName": "Москва", "IntervalMinutes": 15 },
-  "Traffic":   { "Provider": "TomTom", "ApiKey": "<из env>", "IntervalMinutes": 5, "PeakIntervalMinutes": 2,
+  "Traffic":   { "Provider": "Yandex", "IntervalMinutes": 5, "PeakIntervalMinutes": 2,
                  "PeakHours": ["07:00-10:00", "17:00-20:00"] },
   "Telemetry": { "IntervalSeconds": 1, "ProcRoot": "/proc", "SysRoot": "/sys" },
   "Retention": { "WeatherDays": 90, "TrafficDays": 180 },

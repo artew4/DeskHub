@@ -146,6 +146,19 @@ GET https://api.open-meteo.com/v1/forecast
 
 ## 4. TrafficWorker
 
+> **Текущая реализация:** `Workers/TrafficWorker.cs` + `Services/Traffic/`. Первая итерация сразу; ошибка итерации логируется (`Warning`) и не роняет хост. Вместо `PeriodicTimer` — `Task.Delay(delay, TimeProvider, ct)` со **случайным отклонением (jitter)**: `Traffic:IntervalMinutes` (5 мин) + `Random.Shared.Next(-60, 121)` с, т.е. 4–7 мин, не меньше 1 мин — запросы с идеально ровным шагом легко опознаются анти-ботом Яндекса. После каждой итерации в лог (`Information`) пишется «Next traffic refresh in N s». Провайдер выбирается `Traffic:Provider`: **`Yandex`** (по умолчанию) или `Mock`.
+>
+> **`YandexHtmlTrafficProvider` — разбор веб-версии Яндекс Карт** (открытого HTTP API с пробками нет; 1 запрос в 5 мин):
+> - GET `https://yandex.ru/maps/?rtext={латДом},{долДом}~{латРабота},{долРабота}&rtt=auto` (координаты — секция `Traffic`: Вешняковская 25/2 = 55.736021, 37.826279; Ак. Королева 10 = 55.822452, 37.606012). Named `HttpClient` `"YandexMaps"`: заголовки обычного Chrome (`User-Agent`, `Accept`, `Accept-Language: ru-RU`), распаковка gzip/br, таймаут 30 с, редиректы разрешены (вне РФ Яндекс отдаёт `yandex.com` с теми же данными).
+> - Яндекс рендерит маршруты на сервере: всё состояние страницы — один JSON в `<script class="state-view">` (~1.1 МБ). **Regex только вырезает этот JSON**, разбор — `System.Text.Json` (`YandexRouteParser`). Регулярки по `"time":(\d+)` / `"text":"N мин"` ненадёжны: такие поля есть у сотен сегментов.
+> - Путь: `config.routerResponse.routes[]` (если не найден — поиск `routerResponse` по всему дереву). У маршрута: `distance.value` (м), `duration` (с, по пустой дороге), `durationInTraffic` (с, с пробками), `paths[].segments[].street` — названия дорог по ходу.
+> - Яндекс предлагает несколько вариантов (07.10.2026 вечером — 6, длиной 23–32 км). **Варианты опознаются по дорогам, а не по длине** (длины близки и зависят от пробок): «Через МКАД» — самый быстрый вариант со `street = "МКАД"`; «Через ТТК» — самый быстрый со `"ТТК"` (или «Третье транспортное кольцо») без МКАД. Если пути через ТТК сейчас нет — самый быстрый из городских с честной подписью «Через центр» (`id` остаётся `ttk` — геометрия схемы).
+> - `congestion` = `Classify(durationInTraffic, duration)` — база берётся из ответа Яндекса для этого же маршрута, а не константой.
+> - Сбой (сеть, HTTP-ошибка, капча — редирект на `/showcaptcha` или нет `state-view`, смена структуры JSON) → исключение → воркер логирует и **не рассылает** данные. На экране остаются последние полученные, фронтенд через 10 мин пометит их устаревшими. Мок-данные как подмена реальных намеренно не используются: они выглядели бы как настоящие.
+> - Риски: это не публичный API — Яндекс может поменять структуру страницы или начать отдавать капчу; автоматический сбор данных противоречит условиям использования Яндекс Карт. Легальные альтернативы — платный Яндекс Router API или TomTom Routing API (бесплатный лимит покрывает 288 запросов/сутки); подключаются новой реализацией `ITrafficProvider`.
+>
+> **`MockTrafficProvider`** (`Traffic:Provider=Mock`): ТТК ~20 км, 35–70 мин со скачками; МКАД ~28 км, 45–55 мин; «время без пробок» 32 и 42 мин.
+
 ### 4.1. Абстракция провайдера
 
 Провайдер маршрутов выбирается конфигурацией (`Traffic:Provider`) и скрыт за интерфейсом — чтобы можно было сменить API без изменения воркера:
@@ -164,7 +177,7 @@ public sealed record RouteMeasurement(
 
 | Кандидат | Поля ответа | Примечание |
 |---|---|---|
-| **TomTom Routing API** (по умолчанию) | `travelTimeInSeconds`, `noTrafficTravelTimeInSeconds`, `lengthInMeters` (`computeTravelTimeFor=all`, `traffic=true`) | Бесплатный тариф покрывает нагрузку одного устройства |
+| **TomTom Routing API** | `travelTimeInSeconds`, `noTrafficTravelTimeInSeconds`, `lengthInMeters` (`computeTravelTimeFor=all`, `traffic=true`) | Бесплатный тариф покрывает нагрузку одного устройства |
 | Google Routes API | `duration`, `staticDuration`, `distanceMeters` (`routingPreference=TRAFFIC_AWARE`) | Требует биллинг-аккаунт |
 | Яндекс | — | Если нужна точность по РФ; уточнить условия API |
 
@@ -191,16 +204,17 @@ public sealed record RouteMeasurement(
 
 ### 4.3. Классификация загруженности
 
-Пороги — **те же, что фолбэк на фронте** (`Frontend_react/Feature_Widgets.md`, 2.3). Источник правды — бэкенд.
+Пороги — **те же, что фолбэк на фронте** (`Frontend_react/Feature_Widgets.md`, 2.3). Источник правды — бэкенд (`CongestionClassifier`): `ratio = время с пробками / время по пустой дороге`; превышение < 20 % — Free, 20–50 % — Normal, 50–100 % — Heavy, ≥ 100 % — Severe.
 
 ```csharp
-public static CongestionLevel Classify(double ratio) => ratio switch
-{
-    < 1.15 => CongestionLevel.Free,
-    < 1.40 => CongestionLevel.Moderate,
-    < 1.80 => CongestionLevel.Heavy,
-    _      => CongestionLevel.Severe,
-};
+public static CongestionLevel Classify(double durationMinutes, double freeFlowMinutes) =>
+    (durationMinutes / freeFlowMinutes) switch
+    {
+        < 1.2 => CongestionLevel.Free,
+        < 1.5 => CongestionLevel.Normal,
+        < 2.0 => CongestionLevel.Heavy,
+        _     => CongestionLevel.Severe,
+    };
 ```
 
 ### 4.4. Маппинг в DTO
@@ -210,7 +224,7 @@ public static CongestionLevel Classify(double ratio) => ratio switch
 | `durationMinutes` | `round(DurationSeconds / 60)` |
 | `baselineMinutes` | `round(baseline / 60)` |
 | `distanceKm` | `DistanceMeters / 1000`, 1 знак |
-| `congestion` | `Classify(...)` → `"free" \| "moderate" \| "heavy" \| "severe"` |
+| `congestion` | `Classify(...)` → `"free" \| "normal" \| "heavy" \| "severe"` |
 | `trend` | `"up" \| "down" \| "flat"` |
 | `eta` | `now + DurationSeconds` (UTC ISO) |
 

@@ -25,13 +25,24 @@ export interface HourlyForecast {
   precipitationProbability: number
 }
 
-export type CongestionLevel = 'free' | 'moderate' | 'heavy' | 'severe'
+export type CongestionLevel = 'free' | 'normal' | 'heavy' | 'severe'
 
 export interface TrafficModel {
-  routeName: string
+  originName: string
+  originAddress: string
+  destinationName: string
+  destinationAddress: string
+  routes: RouteModel[]
+  updatedAt: string
+}
+
+export interface RouteModel {
+  /** Стабильный ключ («ttk», «mkad») — определяет геометрию линии на схеме */
+  id: string
+  name: string
   durationMinutes: number
   congestion: CongestionLevel
-  updatedAt: string
+  distanceKm: number
 }
 
 export interface TelemetryModel {
@@ -45,7 +56,7 @@ export interface TelemetryModel {
 
 export interface DashboardSnapshot {
   weather: WeatherModel | null
-  traffic: TrafficModel[]
+  traffic: TrafficModel | null
   telemetry: TelemetryModel | null
   serverTime: string
 }

@@ -5,7 +5,7 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'di
 
 interface DashboardState {
   weather: WeatherModel | null
-  traffic: TrafficModel[]
+  traffic: TrafficModel | null
   telemetry: TelemetryModel | null
   serverTime: string | null
 
@@ -13,7 +13,7 @@ interface DashboardState {
   isConnected: boolean
 
   setWeather: (weather: WeatherModel) => void
-  setTraffic: (traffic: TrafficModel[]) => void
+  setTraffic: (traffic: TrafficModel) => void
   setTelemetry: (telemetry: TelemetryModel) => void
   applySnapshot: (snapshot: DashboardSnapshot) => void
   setConnectionStatus: (status: ConnectionStatus) => void
@@ -27,25 +27,19 @@ export function isNotOlder(incoming: string, current: string | null | undefined)
   return current == null || Date.parse(incoming) >= Date.parse(current)
 }
 
-// Маршруты обновляются одним сообщением — сравниваем по самому свежему updatedAt
-const latestUpdate = (traffic: TrafficModel[]): string | null =>
-  traffic.reduce<string | null>((max, r) => (max == null || isNotOlder(r.updatedAt, max) ? r.updatedAt : max), null)
-
 const acceptWeather = (incoming: WeatherModel | null, current: WeatherModel | null) =>
   incoming != null && isNotOlder(incoming.updatedAt, current?.updatedAt)
 
 const acceptTelemetry = (incoming: TelemetryModel | null, current: TelemetryModel | null) =>
   incoming != null && isNotOlder(incoming.timestamp, current?.timestamp)
 
-const acceptTraffic = (incoming: TrafficModel[], current: TrafficModel[]) => {
-  const incomingAt = latestUpdate(incoming)
-  return incomingAt != null && isNotOlder(incomingAt, latestUpdate(current))
-}
+const acceptTraffic = (incoming: TrafficModel | null, current: TrafficModel | null) =>
+  incoming != null && isNotOlder(incoming.updatedAt, current?.updatedAt)
 
 // Компоненты читают стор только через селекторы: useDashboardStore((s) => s.weather)
 export const useDashboardStore = create<DashboardState>()((set) => ({
   weather: null,
-  traffic: [],
+  traffic: null,
   telemetry: null,
   serverTime: null,
 
