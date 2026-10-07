@@ -1,0 +1,19 @@
+# .NET
+bin/
+obj/
+*.user
+
+# Frontend
+node_modules/
+dist/
+
+# Билд фронтенда, копируемый в бэкенд
+src/DeskHub.Api/wwwroot/
+
+# Секреты
+.env
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/

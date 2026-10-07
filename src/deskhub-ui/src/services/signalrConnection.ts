@@ -1,0 +1,83 @@
+import { HttpTransportType, HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr'
+import { useDashboardStore } from '../store/useDashboardStore'
+import type { DashboardSnapshot, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
+
+// Имена событий — зеркало src/DeskHub.Api/Hubs/HubEvents.cs
+export const HubEvents = {
+  WeatherUpdated: 'WeatherUpdated',
+  TrafficUpdated: 'TrafficUpdated',
+  TelemetryTick: 'TelemetryTick',
+} as const
+
+const HUB_URL = '/hubs/dashboard'
+const SNAPSHOT_URL = '/api/dashboard/snapshot'
+const MAX_RETRY_DELAY_MS = 30_000
+
+// Экспоненциальная задержка 1 → 2 → 4 … → 30 с + джиттер. Никогда не сдаёмся (киоск 24/7).
+const retryDelay = (attempt: number) =>
+  Math.min(MAX_RETRY_DELAY_MS, 1_000 * 2 ** attempt) + Math.random() * 1_000
+
+const connection = new HubConnectionBuilder()
+  .withUrl(HUB_URL, { transport: HttpTransportType.WebSockets, skipNegotiation: true })
+  .withAutomaticReconnect({ nextRetryDelayInMilliseconds: ({ previousRetryCount }) => retryDelay(previousRetryCount) })
+  .withServerTimeout(30_000)
+  .withKeepAliveInterval(10_000)
+  .configureLogging(import.meta.env.DEV ? LogLevel.Information : LogLevel.Warning)
+  .build()
+
+const store = () => useDashboardStore.getState()
+
+async function loadSnapshot(): Promise<void> {
+  try {
+    const response = await fetch(SNAPSHOT_URL, { cache: 'no-store' })
+    if (!response.ok) throw new Error(`HTTP ${response.status}`)
+    store().applySnapshot((await response.json()) as DashboardSnapshot)
+  } catch (error) {
+    // Не критично: остаются последние данные, push-события продолжат обновлять стор
+    console.warn('[signalr] snapshot load failed', error)
+  }
+}
+
+function bindEvents(): void {
+  connection.on(HubEvents.WeatherUpdated, (weather: WeatherModel) => store().setWeather(weather))
+  connection.on(HubEvents.TrafficUpdated, (traffic: TrafficModel[]) => store().setTraffic(traffic))
+  connection.on(HubEvents.TelemetryTick, (telemetry: TelemetryModel) => store().setTelemetry(telemetry))
+
+  connection.onreconnecting(() => store().setConnectionStatus('reconnecting'))
+  connection.onreconnected(() => {
+    store().setConnectionStatus('connected')
+    void loadSnapshot() // закрыть «дыру» в данных за время обрыва
+  })
+  // onclose после withAutomaticReconnect срабатывает, только если реконнект прерван —
+  // перезапускаем подключение вручную, чтобы киоск не остался без связи.
+  connection.onclose(() => {
+    store().setConnectionStatus('disconnected')
+    void startWithRetry()
+  })
+}
+
+// withAutomaticReconnect не покрывает первый start() — его ретраи делаем сами.
+async function startWithRetry(attempt = 0): Promise<void> {
+  if (connection.state !== HubConnectionState.Disconnected) return
+  store().setConnectionStatus('connecting')
+  try {
+    await connection.start()
+    store().setConnectionStatus('connected')
+    await loadSnapshot()
+  } catch (error) {
+    store().setConnectionStatus('disconnected')
+    console.warn(`[signalr] start failed (attempt ${attempt + 1})`, error)
+    setTimeout(() => void startWithRetry(attempt + 1), retryDelay(attempt))
+  }
+}
+
+let started = false
+
+/** Запускает единственное соединение приложения. Повторные вызовы игнорируются (StrictMode). */
+export function startDashboardConnection(): void {
+  if (started) return
+  started = true
+  bindEvents()
+  window.addEventListener('online', () => void startWithRetry())
+  void startWithRetry()
+}

@@ -24,7 +24,7 @@ PostgreSQL хранит то, что должно **пережить перез�
 
 | Параметр | Значение |
 |---|---|
-| СУБД | PostgreSQL 16+ (официальный образ, есть `arm64`) |
+| СУБД | PostgreSQL 16 (`postgres:16-bookworm`, есть `arm64`) |
 | Провайдер | `Npgsql.EntityFrameworkCore.PostgreSQL` |
 | Подход | **Code-First**, миграции в `Infrastructure/Persistence/Migrations/` |
 | Именование | `snake_case` для таблиц и колонок (`EFCore.NamingConventions` → `UseSnakeCaseNamingConvention()`) |

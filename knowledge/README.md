@@ -20,17 +20,17 @@
 ## 2. Верхнеуровневая архитектура
 
 ```
-┌─────────────────────────── Raspberry Pi 5 · Raspberry Pi OS (Bookworm, 64-bit) ───────────────────────────┐
+┌─────────────────────────── Raspberry Pi 5 · Raspberry Pi OS (Bookworm, 64-bit) ─────────────────────────────┐
 │                                                                                                             │
-│   Chromium --kiosk --incognito --app=http://localhost:5000                                                 │
-│        │  HTTP (static, REST)          ▲  WebSocket (SignalR push)                                         │
+│   Chromium --kiosk --incognito --app=http://localhost:5000                                                  │
+│        │  HTTP (static, REST)          ▲  WebSocket (SignalR push)                                          │
 │        ▼                               │                                                                    │
-│   ┌──────────────── Docker: deskhub-api (linux/arm64) ─────────────────┐       ┌── Docker: deskhub-db ──┐  │
-│   │ ASP.NET Core (.NET 8/9)                                             │       │ PostgreSQL             │  │
-│   │  • wwwroot/  ← React-билд (Vite)  → UseStaticFiles + SPA fallback   │ EF    │  • weather_logs        │  │
-│   │  • /api/*    ← REST (snapshot, команды, /health)                    │ Core  │  • traffic_logs        │  │
-│   │  • /hubs/dashboard ← SignalR Hub                                    ├──────►│  • routes, settings    │  │
-│   │  • BackgroundServices: Weather · Traffic · Telemetry · Retention    │       └────────────────────────┘  │
+│   ┌──────────────── Docker: deskhub-api (linux/arm64) ──────────────────┐     ┌ Docker: deskhub-postgres ┐  │
+│   │ ASP.NET Core (.NET 10 LTS)                                          │     │ PostgreSQL               │  │
+│   │  • wwwroot/  ← React-билд (Vite)  → UseStaticFiles + SPA fallback   │ EF  │  • weather_logs          │  │
+│   │  • /api/*    ← REST (snapshot, команды, /health)                    │ Core│  • traffic_logs          │  │
+│   │  • /hubs/dashboard ← SignalR Hub                                    ├────►│  • routes, settings      │  │
+│   │  • BackgroundServices: Weather · Traffic · Telemetry · Retention    │     └──────────────────────────┘  │
 │   └───────────────┬──────────────────────────────────┬──────────────────┘                                   │
 │                   │ /proc, /sys (read-only)          │ HTTPS (outbound)                                     │
 │                   ▼                                  ▼                                                      │
@@ -73,7 +73,7 @@ knowledge/
 │   ├── Feature_Dashboard.md               главный экран, часы, сетка 12×6, анимации, ночной режим
 │   └── Feature_Widgets.md                 виджеты Погода / Пробки / Телеметрия, DTO, Canvas-графики
 │
-├── Backend_dotnet/                        ← сервер: ASP.NET Core (.NET 8/9), SignalR, EF Core
+├── Backend_dotnet/                        ← сервер: ASP.NET Core (.NET 10 LTS), SignalR, EF Core
 │   ├── Core_Architecture.md               структура решения, pipeline middleware, статика + SPA fallback, Hub, DI
 │   ├── Database_EFCore.md                 PostgreSQL, Code-First модели, миграции, ретеншн
 │   └── Background_Workers.md              Weather / Traffic / Telemetry / Retention воркеры

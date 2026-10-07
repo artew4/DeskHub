@@ -1,7 +1,7 @@
 # Background Workers — фоновые сервисы
 
 > **Назначение документа:** логика фоновых сервисов DeskHub на базе `BackgroundService`: опрос внешних API и хоста, запись в БД, рассылка через SignalR.
-> Связанные документы: [`Core_Architecture.md`](Core_Architecture.md) (DI, `DashboardBroadcaster`), [`Database_EFCore.md`](Database_EFCore.md) (модели), клиентская сторона — [`../Frontend_react/Feature_Widgets.md`](../Frontend_react/Feature_Widgets.md).
+> Связанные документы: [`Core_Architecture.md`](Core_Architecture.md) (DI, `DashboardNotifier`), [`Database_EFCore.md`](Database_EFCore.md) (модели), клиентская сторона — [`../Frontend_react/Feature_Widgets.md`](../Frontend_react/Feature_Widgets.md).
 
 ---
 
@@ -22,7 +22,7 @@
  │ 2. Смаппить в доменную модель  │
  │ 3. Сохранить в БД (если нужно) │──► PostgreSQL
  │ 4. Смаппить в DTO              │
- │ 5. Broadcaster.Publish…()      │──► DashboardState + SignalR Clients.All
+ │ 5. Notifier.Send…Update()      │──► DashboardState + SignalR Clients.All
  └────────────┬───────────────────┘
               ▼
      ждать следующий тик (PeriodicTimer)
@@ -92,13 +92,13 @@ public abstract class PeriodicWorker(ILogger logger, TimeProvider time) : Backgr
 ### 3.1. Алгоритм
 
 ```
-каждые Weather:IntervalMinutes (15):
+каждые OpenMeteo:IntervalMinutes (15):
   1. GET Open-Meteo /v1/forecast
   2. Маппинг ответа → WeatherLog (+ HourlyForecast на 24 ч вперёд)
   3. Если current.time не изменился с прошлого раза → пропустить запись в БД
      (Open-Meteo обновляет current раз в 15 мин), иначе INSERT в weather_logs
   4. Маппинг → WeatherDto (updatedAt = время получения)
-  5. broadcaster.PublishWeatherAsync(dto) → DashboardState + WeatherUpdated
+  5. notifier.SendWeatherUpdate(dto) → DashboardState + WeatherUpdated
 ```
 
 ### 3.2. Запрос к Open-Meteo
@@ -177,7 +177,7 @@ public sealed record RouteMeasurement(
   3. congestion = Classify(duration / baseline)
   4. trend = сравнение с предыдущим замером этого маршрута (|Δ| ≥ 120 с → up/down)
   5. INSERT в traffic_logs
-собрать TrafficDto(routes, updatedAt) → broadcaster.PublishTrafficAsync()
+собрать TrafficDto(routes, updatedAt) → notifier.SendTrafficUpdate()
 ```
 
 Ошибка по одному маршруту не отменяет остальные: в DTO для него сохраняется предыдущее значение.
@@ -290,6 +290,6 @@ public sealed class LinuxTelemetryReader(IOptions<TelemetryOptions> opt) : ITele
 | Парсеры `/proc`, `/sys` | Unit-тесты на фикстурах, снятых с реального Pi 5 |
 | Маппинг Open-Meteo | Unit-тест на сохранённом JSON-ответе API |
 | `Classify`, baseline, trend | Unit-тесты граничных значений |
-| Цикл воркера | `FakeTimeProvider` (`Microsoft.Extensions.TimeProvider.Testing`): продвижение времени → проверка вызова провайдера и `IDashboardBroadcaster` (мок) |
+| Цикл воркера | `FakeTimeProvider` (`Microsoft.Extensions.TimeProvider.Testing`): продвижение времени → проверка вызова провайдера и `DashboardNotifier` (мок `IHubContext`) |
 | Отказоустойчивость | Провайдер бросает исключение → воркер продолжает работу, следующая итерация выполняется, хост не падает |
 | Часы пик | `GetInterval()` возвращает 2/5/15 мин для разного локального времени |

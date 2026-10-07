@@ -12,14 +12,14 @@
 ```
           ┌───────────────────────┐      ┌───────────────────────┐
  Stage 1  │ frontend              │      │ backend               │  Stage 2
- (native) │ node:22-bookworm-slim │      │ dotnet/sdk:8.0        │  (native, cross-compile
-          │ npm ci → vite build   │      │ restore → publish     │   под linux-arm64)
-          │   → /out/wwwroot      │      │   -a arm64 → /app/pub │
+ (native) │ node:22-bookworm-slim │      │ dotnet/sdk:10.0       │  (native, cross-compile
+          │ npm ci → vite build   │ ───► │ + wwwroot (COPY)      │   под linux-arm64)
+          │ → DeskHub.Api/wwwroot │      │ publish -a arm64      │
           └──────────┬────────────┘      └──────────┬────────────┘
-                     │ COPY                         │ COPY
-                     ▼                              ▼
+                                                    │ COPY /app/publish
+                                                    ▼
           ┌──────────────────────────────────────────────────────┐
- Stage 3  │ final — dotnet/aspnet:8.0-bookworm-slim (linux/arm64) │
+ Stage 3  │ final — dotnet/aspnet:10.0 (Ubuntu 24.04, linux/arm64)│
  (target) │ /app/DeskHub.Api.dll  +  /app/wwwroot/ (React)        │
           └──────────────────────────────────────────────────────┘
 ```
@@ -32,17 +32,19 @@
 
 ```
 DeskHub/
+├── DeskHub.slnx              ← решение .NET (формат SDK 10)
 ├── Dockerfile                ← сборка образа (контекст — корень репозитория)
 ├── .dockerignore
 ├── docker-compose.yml        ← см. Compose_And_Pi.md
 ├── .env.example
-├── frontend/                 ← React + Vite (package.json, src/, vite.config.ts)
-├── backend/                  ← DeskHub.sln, global.json, src/DeskHub.Api, tests/
-├── deploy/pi/                ← kiosk.sh, autostart, скрипты бэкапа
+├── src/
+│   ├── DeskHub.Api/          ← ASP.NET Core (.NET 10); wwwroot/ — артефакт сборки фронтенда
+│   └── deskhub-ui/           ← React + Vite + TS + Tailwind v3
+├── deploy/pi/                ← kiosk.sh, скрипты бэкапа (создаются на этапе деплоя)
 └── knowledge/
 ```
 
-> Фронтенд в локальной разработке собирается в `backend/src/DeskHub.Api/wwwroot` (`build.outDir` в `vite.config.ts`). Каталог `wwwroot/` добавлен в `.gitignore` — артефакты сборки в git не хранятся.
+> Фронтенд и локально, и в Docker собирается в `src/DeskHub.Api/wwwroot` (`build.outDir` в `vite.config.ts`). Каталог `wwwroot/` добавлен в `.gitignore` — артефакты сборки в git не хранятся.
 
 ---
 
@@ -50,41 +52,42 @@ DeskHub/
 
 ```dockerfile
 # syntax=docker/dockerfile:1.7
-ARG DOTNET_VERSION=8.0
+# Сборка: docker buildx build --platform linux/arm64 -t deskhub-api .
+# Подробности: knowledge/Infrastructure/Docker_Setup.md
+
+ARG DOTNET_VERSION=10.0
 ARG NODE_VERSION=22
 
 # ───────────── Stage 1: Frontend (Vite build) ─────────────
-# --platform=$BUILDPLATFORM: собираем на нативной архитектуре сборочной машины.
-# Результат (HTML/JS/CSS) не зависит от архитектуры — эмуляция не нужна.
+# Собирается нативно на машине сборки: HTML/JS/CSS не зависят от архитектуры.
 FROM --platform=$BUILDPLATFORM node:${NODE_VERSION}-bookworm-slim AS frontend
-WORKDIR /src/frontend
+WORKDIR /src/deskhub-ui
 
-COPY frontend/package.json frontend/package-lock.json ./
+COPY src/deskhub-ui/package.json src/deskhub-ui/package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm npm ci
 
-COPY frontend/ ./
-RUN npm run build -- --outDir /out/wwwroot --emptyOutDir
+COPY src/deskhub-ui/ ./
+# vite.config.ts: build.outDir = ../DeskHub.Api/wwwroot → /src/DeskHub.Api/wwwroot
+RUN npm run build
 
-# ───────────── Stage 2: Backend (dotnet publish) ─────────────
-# SDK тоже работает нативно и кросс-компилирует под целевую архитектуру (-a $TARGETARCH).
+# ───────────── Stage 2: Backend (dotnet publish под целевую архитектуру) ─────────────
 FROM --platform=$BUILDPLATFORM mcr.microsoft.com/dotnet/sdk:${DOTNET_VERSION} AS backend
 ARG TARGETARCH
 WORKDIR /src
 
-# Сначала только файлы проектов — слой restore кэшируется, пока не меняются зависимости
-COPY backend/global.json ./
-COPY backend/src/DeskHub.Api/DeskHub.Api.csproj src/DeskHub.Api/
+COPY src/DeskHub.Api/DeskHub.Api.csproj DeskHub.Api/
 RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet restore src/DeskHub.Api/DeskHub.Api.csproj -a $TARGETARCH
+    dotnet restore DeskHub.Api/DeskHub.Api.csproj -a $TARGETARCH
 
-COPY backend/ ./
+COPY src/DeskHub.Api/ DeskHub.Api/
+COPY --from=frontend /src/DeskHub.Api/wwwroot DeskHub.Api/wwwroot
 RUN --mount=type=cache,target=/root/.nuget/packages \
-    dotnet publish src/DeskHub.Api/DeskHub.Api.csproj \
+    dotnet publish DeskHub.Api/DeskHub.Api.csproj \
       -c Release -a $TARGETARCH --no-restore \
       -o /app/publish /p:UseAppHost=false
 
-# ───────────── Stage 3: Runtime (целевая платформа linux/arm64) ─────────────
-FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION}-bookworm-slim AS final
+# ───────────── Stage 3: Runtime (linux/arm64) ─────────────
+FROM mcr.microsoft.com/dotnet/aspnet:${DOTNET_VERSION} AS final
 
 # curl — для HEALTHCHECK (в образе aspnet его нет)
 RUN apt-get update \
@@ -92,12 +95,10 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
-COPY --from=backend  /app/publish  ./
-COPY --from=frontend /out/wwwroot  ./wwwroot
+COPY --from=backend /app/publish ./
 
 ENV ASPNETCORE_HTTP_PORTS=8080 \
-    DOTNET_gcServer=0 \
-    DOTNET_GCHeapHardLimit=0x20000000
+    DOTNET_gcServer=0
 EXPOSE 8080
 
 HEALTHCHECK --interval=15s --timeout=3s --start-period=30s --retries=5 \
@@ -115,14 +116,13 @@ ENTRYPOINT ["dotnet", "DeskHub.Api.dll"]
 | `dotnet publish -a $TARGETARCH` | Кросс-компиляция: `TARGETARCH=arm64` → RID `linux-arm64`. Вариант framework-dependent (`UseAppHost=false`) — runtime уже есть в базовом образе. |
 | `restore` отдельным слоем | Кэш зависимостей NuGet переиспользуется, пока не меняются `.csproj`. То же для `npm ci` и `package-lock.json`. |
 | `--mount=type=cache` | Кэш npm/NuGet между сборками (BuildKit). |
-| `aspnet:*-bookworm-slim` | Debian-based, официально поддерживает `arm64`; совместим с glibc Raspberry Pi OS. |
-| `npm run build -- --outDir /out/wwwroot` | Переопределяет `build.outDir` из `vite.config.ts` только для Docker, без изменения конфига. Требует, чтобы скрипт `build` заканчивался вызовом `vite build`. |
+| `aspnet:10.0` (Ubuntu 24.04 Noble) | С .NET 10 дефолтные образы — Ubuntu, Debian-варианты больше не публикуются. Официально поддерживает `arm64`. Chiseled-вариант не используется: в нём нет `apt` для установки `curl` под HEALTHCHECK. |
+| Фронт → `wwwroot` до `dotnet publish` | Stage 1 собирает Vite в `/src/DeskHub.Api/wwwroot` (тот же `outDir`, что локально), stage 2 копирует его в проект **перед** publish — файлы попадают в publish-вывод как обычный content. |
 | `DOTNET_gcServer=0` | Workstation GC — меньше потребление памяти, достаточно для одного устройства. |
-| `DOTNET_GCHeapHardLimit` (512 MB) | Ограничение кучи — страховка от утечек в 24/7-режиме. Подбирается по факту потребления. |
-| `USER $APP_UID` | Непривилегированный пользователь `app` (встроен в образы .NET 8+). |
+| `USER $APP_UID` | Непривилегированный пользователь `app` (встроен в образы .NET начиная с 8). |
 | `HEALTHCHECK` на `/health` | Тот же эндпоинт использует kiosk-скрипт (см. `Compose_And_Pi.md`). |
 
-> **.NET 9:** достаточно передать `--build-arg DOTNET_VERSION=9.0`. Версия должна совпадать с `global.json`.
+> Версия .NET задаётся `ARG DOTNET_VERSION` и должна совпадать с `TargetFramework` в `DeskHub.Api.csproj` (`net10.0`).
 
 ---
 
@@ -141,11 +141,10 @@ ENTRYPOINT ["dotnet", "DeskHub.Api.dll"]
 .vscode
 .idea
 knowledge
-*.md
 .env
 ```
 
-Без него в контекст сборки уходят `node_modules` и `bin/obj` — сотни мегабайт и риск подмешать артефакты хост-архитектуры.
+`wwwroot` исключён намеренно: он всегда пересобирается в stage 1 и не должен подмешиваться из локальной сборки. Без `.dockerignore` в контекст уходят `node_modules` и `bin/obj` — сотни мегабайт и риск подмешать артефакты хост-архитектуры.
 
 ---
 
@@ -165,7 +164,6 @@ docker buildx create --name deskhub --use
 # Сборка и публикация в registry
 docker buildx build \
   --platform linux/arm64 \
-  --build-arg DOTNET_VERSION=8.0 \
   -t ghcr.io/<owner>/deskhub-api:$(git rev-parse --short HEAD) \
   -t ghcr.io/<owner>/deskhub-api:latest \
   --push .
@@ -202,7 +200,7 @@ docker compose build        # платформа хоста = linux/arm64, ни�
     cache-to: type=gha,mode=max
 ```
 
-Перед сборкой образа в CI запускаются тесты: `npm run lint && npm test` (frontend) и `dotnet test` (backend).
+Перед сборкой образа в CI запускаются проверки: `npm run lint && npm run build` в `src/deskhub-ui` и `dotnet test` (когда появится проект тестов).
 
 ---
 
@@ -219,9 +217,11 @@ docker compose build        # платформа хоста = linux/arm64, ни�
 # Архитектура образа
 docker image inspect deskhub-api:latest --format '{{.Os}}/{{.Architecture}}'   # → linux/arm64
 
-# Размер (ориентир: ~230–260 MB)
+# Размер (факт на .NET 10 / Ubuntu Noble + curl: ~380 MB)
 docker image ls deskhub-api
 
 # Наличие фронтенда внутри
-docker run --rm --entrypoint ls deskhub-api:latest /app/wwwroot   # → index.html  assets/
+docker run --rm --entrypoint ls deskhub-api:latest /app/wwwroot   # → index.html(.br/.gz)  assets/
 ```
+
+> `dotnet publish` в .NET 10 автоматически создаёт пре-сжатые копии статики (`.br`, `.gz`) в `wwwroot`. `UseStaticFiles` их не использует (это умеет `MapStaticAssets`); на работу не влияет, только +~100 KB в образе.

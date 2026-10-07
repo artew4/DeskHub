@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Kiosk reset: фиксированный экран 1024×600 без скролла и системных жестов
+   (см. knowledge/Frontend_react/01_Frontend_TechStack.md, раздел 2) */
+html,
+body,
+#root {
+  width: 1024px;
+  height: 600px;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  background: #000;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}

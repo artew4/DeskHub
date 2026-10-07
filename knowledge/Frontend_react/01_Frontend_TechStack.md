@@ -13,7 +13,7 @@
 | Фреймворк | **React 18+** | Только функциональные компоненты и хуки |
 | Сборка | **Vite** | `vite build` → статические файлы в `wwwroot` бэкенда |
 | Язык | **TypeScript** (`strict: true`) | `any` запрещён (кроме изолированных адаптеров с комментарием) |
-| Стили | **Tailwind CSS** | Дизайн-токены в `tailwind.config.ts` |
+| Стили | **Tailwind CSS** | Tailwind **v3** (`tailwind.config.js` + PostCSS); дизайн-токены в конфиге |
 | Графика | **Canvas 2D** / **SVG** | Для графиков телеметрии и спарклайнов |
 | Real-time | **@microsoft/signalr** | Единственный канал live-данных |
 | State | **Zustand** | См. [`Core.md`](Core.md) |
@@ -24,7 +24,7 @@
 
 | Слой | Технология |
 |---|---|
-| Runtime | .NET 8/9, ASP.NET Core |
+| Runtime | .NET 10 (LTS), ASP.NET Core |
 | Real-time | SignalR (хаб `/hubs/dashboard`) |
 | БД | PostgreSQL + EF Core |
 | Статика | `UseStaticFiles()` + `MapFallbackToFile("index.html")` |

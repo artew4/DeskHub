@@ -14,8 +14,8 @@
  Raspberry Pi OS (Bookworm, 64-bit) ── systemd
    │
    ├──► docker.service (enabled) ──► compose-проект (restart: unless-stopped)
-   │        ├─ deskhub-db   ── healthcheck: pg_isready
-   │        └─ deskhub-api  ── depends_on db (healthy) → миграции → /health = 200
+   │        ├─ postgres (deskhub-postgres) ── healthcheck: pg_isready
+   │        └─ api (deskhub-api)           ── depends_on postgres (healthy) → миграции → /health = 200
    │
    └──► автологин пользователя → композитор labwc (Wayland)
             └─ ~/.config/labwc/autostart → kiosk.sh
@@ -30,61 +30,58 @@
 ## 2. `docker-compose.yml`
 
 ```yaml
+# Подробности: knowledge/Infrastructure/Compose_And_Pi.md
 name: deskhub
 
 services:
-  db:
-    image: postgres:16-bookworm            # официальный образ, есть linux/arm64
-    container_name: deskhub-db
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: deskhub-api:latest
+    container_name: deskhub-api
     restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5000:8080"   # только localhost: Kiosk работает на этом же устройстве
     environment:
-      POSTGRES_DB: deskhub
-      POSTGRES_USER: deskhub
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      ASPNETCORE_ENVIRONMENT: Production
       TZ: ${TZ:-Europe/Moscow}
+      ConnectionStrings__DefaultConnection: ${ConnectionStrings__DefaultConnection:?set in .env}
+      OpenMeteo__Latitude: ${OpenMeteo__Latitude}
+      OpenMeteo__Longitude: ${OpenMeteo__Longitude}
+      OpenMeteo__LocationName: ${OpenMeteo__LocationName}
+      OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
+      Traffic__Provider: ${Traffic__Provider:-TomTom}
+      Traffic__ApiKey: ${Traffic__ApiKey:-}
+      Telemetry__ProcRoot: /host/proc
+      Telemetry__SysRoot: /host/sys
     volumes:
-      - pgdata:/var/lib/postgresql/data
-    # Порты наружу не публикуются: БД доступна только API по внутренней сети compose.
-    # Для отладки с хоста можно временно добавить: ports: ["127.0.0.1:5432:5432"]
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U deskhub -d deskhub"]
-      interval: 5s
-      timeout: 3s
-      retries: 20
-    shm_size: 128mb
+      - /proc:/host/proc:ro     # метрики хоста для TelemetryWorker
+      - /sys:/host/sys:ro
     logging: &default-logging
       driver: json-file
       options: { max-size: "10m", max-file: "3" }
 
-  api:
-    image: ${DESKHUB_IMAGE:-ghcr.io/<owner>/deskhub-api}:${DESKHUB_IMAGE_TAG:-latest}
-    build:                                  # для сборки прямо на Pi: docker compose build
-      context: .
-      dockerfile: Dockerfile
-    container_name: deskhub-api
+  postgres:
+    image: postgres:16-bookworm
+    container_name: deskhub-postgres
     restart: unless-stopped
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - "127.0.0.1:5000:8080"               # только localhost: Kiosk на этом же устройстве
     environment:
-      ASPNETCORE_ENVIRONMENT: Production
+      POSTGRES_DB: ${POSTGRES_DB:-deskhub}
+      POSTGRES_USER: ${POSTGRES_USER:-deskhub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
       TZ: ${TZ:-Europe/Moscow}
-      ConnectionStrings__DeskHub: "Host=db;Port=5432;Database=deskhub;Username=deskhub;Password=${POSTGRES_PASSWORD}"
-      Weather__Latitude: ${WEATHER_LAT}
-      Weather__Longitude: ${WEATHER_LON}
-      Weather__LocationName: ${WEATHER_LOCATION_NAME}
-      Traffic__Provider: ${TRAFFIC_PROVIDER:-TomTom}
-      Traffic__ApiKey: ${TRAFFIC_API_KEY:?set in .env}
-      Telemetry__ProcRoot: /host/proc
-      Telemetry__SysRoot: /host/sys
     volumes:
-      - /proc:/host/proc:ro                 # метрики хоста (CPU, RAM, uptime)
-      - /sys:/host/sys:ro                   # температура SoC, частота CPU
-    # Опционально, для vcgencmd get_throttled (см. Backend_dotnet/Background_Workers.md, 5.1):
-    # devices: ["/dev/vcio:/dev/vcio"]
-    mem_limit: 768m
+      - pgdata:/var/lib/postgresql/data
+    # Порт наружу не публикуется — БД доступна только сервису api.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
     logging: *default-logging
 
 volumes:
@@ -96,34 +93,44 @@ volumes:
 | Элемент | Решение и причина |
 |---|---|
 | **Порт `127.0.0.1:5000:8080`** | API слушает `8080` внутри контейнера, на хосте доступен **только с localhost** — Chromium открывает `http://localhost:5000`. Из LAN API недоступен, поэтому аутентификация не нужна (см. `Backend_dotnet/Core_Architecture.md`, 3.2). |
-| **БД без `ports`** | PostgreSQL виден только сервису `api` во внутренней сети compose (`Host=db`). |
+| **БД без `ports`** | PostgreSQL виден только сервису `api` во внутренней сети compose (`Host=postgres`). |
 | **Вольюм `pgdata`** | Именованный вольюм Docker → данные переживают пересоздание контейнера и обновление образа. Хранится в `/var/lib/docker/volumes/deskhub_pgdata`. При наличии NVMe SSD каталог Docker (`data-root`) рекомендуется перенести на SSD. |
-| **`depends_on: service_healthy`** | API стартует после готовности PostgreSQL; ретраи миграций в коде — вторая линия защиты. |
+| **`depends_on: service_healthy`** | `api` стартует после готовности сервиса `postgres`; ретраи миграций в коде — вторая линия защиты. |
 | **`/proc`, `/sys` → `/host/*:ro`** | Явный read-only доступ к метрикам хоста для `TelemetryWorker`. Пути передаются через `Telemetry__ProcRoot/SysRoot`. |
 | **`TZ`** | Совпадает с таймзоной хоста — часы пик, ночной режим и retention считаются в локальном времени. |
 | **`restart: unless-stopped`** | Автоподъём после перезагрузки Pi и падений; не поднимает контейнер, остановленный вручную. |
 | **`logging` с ротацией** | Логи не забивают SD-карту (максимум 30 MB на сервис). |
-| **`mem_limit`** | Страховка от утечек; у Pi 8 GB, лимит с большим запасом. |
+| **Троттлинг (опционально)** | Для `vcgencmd get_throttled` добавить сервису `api`: `devices: ["/dev/vcio:/dev/vcio"]` (см. `Backend_dotnet/Background_Workers.md`, 5.1). |
 
 ### 2.2. `.env` (на устройстве, не в git)
 
 ```dotenv
-# .env.example — скопировать в .env и заполнить
-DESKHUB_IMAGE=ghcr.io/<owner>/deskhub-api
-DESKHUB_IMAGE_TAG=latest
+# Скопировать в .env и заполнить. Файл .env в git не коммитится.
+
 TZ=Europe/Moscow
 
+# --- PostgreSQL ---
+POSTGRES_DB=deskhub
+POSTGRES_USER=deskhub
 POSTGRES_PASSWORD=change-me
 
-WEATHER_LAT=55.75
-WEATHER_LON=37.62
-WEATHER_LOCATION_NAME=Москва
+# Строка подключения API (Host = имя сервиса в docker-compose); пароль должен совпадать с POSTGRES_PASSWORD
+ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=deskhub;Username=deskhub;Password=change-me
 
-TRAFFIC_PROVIDER=TomTom
-TRAFFIC_API_KEY=change-me
+# --- Open-Meteo (ключ не нужен) ---
+OpenMeteo__Latitude=55.75
+OpenMeteo__Longitude=37.62
+OpenMeteo__LocationName=Москва
+OpenMeteo__IntervalMinutes=15
+
+# --- Пробки ---
+Traffic__Provider=TomTom
+Traffic__ApiKey=
 ```
 
 Права: `chmod 600 .env`. Синтаксис `${VAR:?…}` прерывает запуск compose, если обязательная переменная не задана.
+
+> Пароль задаётся дважды — в `POSTGRES_PASSWORD` (инициализация БД) и внутри `ConnectionStrings__DefaultConnection` (подключение API). Значения должны совпадать. `POSTGRES_PASSWORD` применяется только при **первой** инициализации вольюма `pgdata`.
 
 ---
 
@@ -147,7 +154,7 @@ mkdir -p ~/deskhub && cd ~/deskhub
 #    сюда: docker-compose.yml, .env, deploy/pi/kiosk.sh
 
 # 5. Первый запуск
-docker compose pull      # или: docker compose build
+docker compose build     # или docker compose pull, если образ публикуется в registry
 docker compose up -d
 curl -fsS http://localhost:5000/health   # → Healthy
 ```
@@ -256,7 +263,7 @@ EOF
 ```bash
 cd ~/deskhub
 # зафиксировать новый тег в .env: DESKHUB_IMAGE_TAG=<sha>
-docker compose pull api
+docker compose build api   # или: docker compose pull api
 docker compose up -d api          # миграции применяются при старте
 docker image prune -f
 ```
@@ -268,13 +275,13 @@ docker image prune -f
 
 ```bash
 # crontab -e  (ежедневно в 04:00, хранить 14 дней)
-0 4 * * * cd ~/deskhub && docker compose exec -T db pg_dump -U deskhub -Fc deskhub > /mnt/backup/deskhub-$(date +\%F).dump && find /mnt/backup -name 'deskhub-*.dump' -mtime +14 -delete
+0 4 * * * cd ~/deskhub && docker compose exec -T postgres pg_dump -U deskhub -Fc deskhub > /mnt/backup/deskhub-$(date +\%F).dump && find /mnt/backup -name 'deskhub-*.dump' -mtime +14 -delete
 ```
 
 Восстановление:
 
 ```bash
-docker compose exec -T db pg_restore -U deskhub -d deskhub --clean < /mnt/backup/deskhub-YYYY-MM-DD.dump
+docker compose exec -T postgres pg_restore -U deskhub -d deskhub --clean < /mnt/backup/deskhub-YYYY-MM-DD.dump
 ```
 
 ### 5.3. Диагностика

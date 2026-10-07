@@ -179,7 +179,7 @@ duration: 400 ms, easing: ease-kiosk, delay: placement.enterDelayMs
 ```
 
 ```ts
-// tailwind.config.ts
+// tailwind.config.js
 keyframes: {
   'widget-in': {
     '0%':   { opacity: '0', transform: 'translateY(12px) scale(0.98)' },

@@ -16,9 +16,9 @@
 
 | Параметр | Значение |
 |---|---|
-| Runtime | .NET 8 (LTS) или .NET 9 — выбирается один, фиксируется в `global.json` |
+| Runtime | **.NET 10 (LTS, поддержка до 11.2028)**. .NET 8/9 отклонены: оба теряют поддержку 10.11.2026 |
 | Hosting | Kestrel, без reverse proxy (только localhost) |
-| Порт в контейнере | `8080` (дефолт образов `aspnet` с .NET 8), наружу — `localhost:5000` |
+| Порт в контейнере | `8080` (дефолт образов `aspnet` начиная с .NET 8), наружу — `localhost:5000` |
 | Сериализация | `System.Text.Json`, camelCase, enum как строки в camelCase |
 | Время | Всё хранится и передаётся в **UTC** (ISO 8601) |
 
@@ -29,17 +29,20 @@
 Проект небольшой, поэтому используется **один веб-проект с разбиением по фичам** (vertical slices) + проект тестов. Разделение на отдельные сборки (Domain/Infrastructure) не вводится, пока для этого нет причины.
 
 ```
-backend/
-├── DeskHub.sln
-├── global.json
+DeskHub/                               # корень репозитория
+├── DeskHub.slnx                       # формат решения SDK 10 (XML)
+├── src/deskhub-ui/                    # фронтенд (см. Frontend_react/Core.md)
 ├── src/DeskHub.Api/
 │   ├── Program.cs                     # composition root: DI + pipeline
 │   ├── appsettings.json
 │   ├── appsettings.Development.json
 │   ├── Hubs/
-│   │   ├── DashboardHub.cs            # Hub<IDashboardClient>
-│   │   ├── IDashboardClient.cs        # строго типизированные события клиента
-│   │   └── HubEvents.cs               # имена событий (зеркало фронтового hubEvents.ts)
+│   ├── Models/                        # DTO: WeatherModel, TrafficModel, TelemetryModel, DashboardSnapshot (+ StubData)
+│   │   └── …                          # по мере роста — перенос в Features/<Name>/
+│   ├── Hubs/
+│   │   ├── DashboardHub.cs            # Hub (без клиентских методов)
+│   │   ├── DashboardNotifier.cs       # рассылка через IHubContext — используется воркерами
+│   │   └── HubEvents.cs               # имена событий (зеркало фронтенда)
 │   ├── Features/
 │   │   ├── Dashboard/                 # SnapshotEndpoint, DashboardState (in-memory кэш)
 │   │   ├── Weather/                   # WeatherWorker, OpenMeteoClient, DTO, маппинг
@@ -115,50 +118,52 @@ static void SetCacheHeaders(HttpContext ctx)
 
 ## 4. SignalR Hub
 
-### 4.1. Строго типизированный хаб
+### 4.1. Хаб
+
+Реализация: `src/DeskHub.Api/Hubs/`.
 
 ```csharp
-public interface IDashboardClient
-{
-    Task WeatherUpdated(WeatherDto dto);
-    Task TrafficUpdated(TrafficDto dto);
-    Task TelemetryTick(TelemetryDto dto);
-    Task SettingsChanged(SettingsDto dto);
-}
-
-public sealed class DashboardHub(ILogger<DashboardHub> logger) : Hub<IDashboardClient>
+public sealed class DashboardHub(ILogger<DashboardHub> logger) : Hub
 {
     public override Task OnConnectedAsync()
     {
-        logger.LogInformation("Kiosk connected: {ConnectionId}", Context.ConnectionId);
+        logger.LogInformation("Dashboard client connected: {ConnectionId}", Context.ConnectionId);
         return base.OnConnectedAsync();
     }
+    // OnDisconnectedAsync — аналогично
+}
+
+public static class HubEvents          // зеркало HubEvents в src/deskhub-ui/src/services/signalrConnection.ts
+{
+    public const string WeatherUpdated = nameof(WeatherUpdated);
+    public const string TrafficUpdated = nameof(TrafficUpdated);
+    public const string TelemetryTick  = nameof(TelemetryTick);
 }
 ```
 
-- Имена методов `IDashboardClient` **являются именами событий** на клиенте и должны совпадать с `HubEvents` во фронтенде.
-- Хаб **не содержит бизнес-логики** и не принимает команд от клиента — канал однонаправленный (сервер → клиент). Команды идут через REST.
+- Хаб — обычный (нетипизированный) `Hub`; имена событий задаются константами `HubEvents`, строковые литералы по коду запрещены.
+- Хаб **не содержит бизнес-логики** и не имеет методов, вызываемых клиентом — канал однонаправленный (сервер → клиент). Команды идут через REST.
 - Все клиенты получают одинаковые данные → рассылка через `Clients.All`. Группы не нужны (возможны в будущем при нескольких экранах).
 
-### 4.2. Отправка из воркеров
+### 4.2. Отправка из воркеров: `DashboardNotifier`
 
-Воркеры отправляют события через `IHubContext<DashboardHub, IDashboardClient>`, а не через сам хаб:
+Экземпляр `Hub` создаётся на каждый вызов от клиента, поэтому методы рассылки на самом хабе воркерам недоступны. Воркеры используют singleton `DashboardNotifier`, работающий через `IHubContext<DashboardHub>`:
 
 ```csharp
-public sealed class DashboardBroadcaster(
-    IHubContext<DashboardHub, IDashboardClient> hub,
-    DashboardState state) : IDashboardBroadcaster
+public sealed class DashboardNotifier(IHubContext<DashboardHub> hub)
 {
-    public async Task PublishWeatherAsync(WeatherDto dto, CancellationToken ct)
-    {
-        state.SetWeather(dto);                      // 1. обновить in-memory снимок
-        await hub.Clients.All.WeatherUpdated(dto);  // 2. разослать клиентам
-    }
-    // аналогично Traffic / Telemetry / Settings
+    public Task SendWeatherUpdate(WeatherModel weather, CancellationToken ct = default) =>
+        hub.Clients.All.SendAsync(HubEvents.WeatherUpdated, weather, ct);
+
+    public Task SendTrafficUpdate(IReadOnlyList<TrafficModel> routes, CancellationToken ct = default) =>
+        hub.Clients.All.SendAsync(HubEvents.TrafficUpdated, routes, ct);
+
+    public Task SendTelemetryUpdate(TelemetryModel telemetry, CancellationToken ct = default) =>
+        hub.Clients.All.SendAsync(HubEvents.TelemetryTick, telemetry, ct);
 }
 ```
 
-Правило: **сначала обновляется `DashboardState`, потом пуш** — тогда клиент, переподключившийся между этими шагами, получит актуальный snapshot.
+Когда появится `DashboardState` (раздел 5.1), `Send*Update` **сначала обновляет `DashboardState`, потом пушит** — тогда клиент, переподключившийся между этими шагами, получит актуальный snapshot.
 
 ### 4.3. Настройки SignalR
 
@@ -244,7 +249,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // --- Options (валидация при старте) ---
 builder.Services.AddOptions<WeatherOptions>()
-    .BindConfiguration("Weather").ValidateDataAnnotations().ValidateOnStart();
+    .BindConfiguration("OpenMeteo").ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<TrafficOptions>()
     .BindConfiguration("Traffic").ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<TelemetryOptions>()
@@ -253,7 +258,7 @@ builder.Services.AddOptions<RetentionOptions>().BindConfiguration("Retention");
 
 // --- Persistence ---
 builder.Services.AddDbContext<DeskHubDbContext>(o => o
-    .UseNpgsql(builder.Configuration.GetConnectionString("DeskHub"))
+    .UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection"))
     .UseSnakeCaseNamingConvention());
 
 // --- HTTP-клиенты внешних API (с ретраями и таймаутами) ---
@@ -265,7 +270,7 @@ builder.Services.AddHttpClient<ITrafficProvider, TomTomTrafficProvider>()   // �
 
 // --- Состояние и рассылка ---
 builder.Services.AddSingleton<DashboardState>();
-builder.Services.AddSingleton<IDashboardBroadcaster, DashboardBroadcaster>();
+builder.Services.AddSingleton<DashboardNotifier>();
 builder.Services.AddSingleton<ITelemetryReader, LinuxTelemetryReader>();
 builder.Services.AddSingleton(TimeProvider.System);
 
@@ -287,7 +292,7 @@ builder.Services.AddProblemDetails();
 |---|---|---|
 | `DeskHubDbContext` | Scoped | В воркерах (singleton) — **только** через `IServiceScopeFactory.CreateAsyncScope()` на каждую итерацию |
 | `OpenMeteoClient`, `ITrafficProvider` | Transient (typed HttpClient) | Внутри — пул `HttpMessageHandler` от `IHttpClientFactory` |
-| `DashboardState`, `DashboardBroadcaster` | Singleton | Общий снимок для всех клиентов |
+| `DashboardState`, `DashboardNotifier` | Singleton | Общий снимок для всех клиентов |
 | `ITelemetryReader` | Singleton | Хранит предыдущий замер `/proc/stat` для расчёта загрузки CPU |
 | `TimeProvider` | Singleton | Абстракция времени — для тестов воркеров |
 | Воркеры | Singleton (`AddHostedService`) | Не держат Scoped-зависимостей в конструкторе |
@@ -302,8 +307,8 @@ builder.Services.AddProblemDetails();
 
 ```json
 {
-  "ConnectionStrings": { "DeskHub": "Host=db;Port=5432;Database=deskhub;Username=deskhub;Password=<из env>" },
-  "Weather":   { "Latitude": 55.75, "Longitude": 37.62, "LocationName": "Москва", "IntervalMinutes": 15 },
+  "ConnectionStrings": { "DefaultConnection": "Host=postgres;Port=5432;Database=deskhub;Username=deskhub;Password=<из env>" },
+  "OpenMeteo": { "Latitude": 55.75, "Longitude": 37.62, "LocationName": "Москва", "IntervalMinutes": 15 },
   "Traffic":   { "Provider": "TomTom", "ApiKey": "<из env>", "IntervalMinutes": 5, "PeakIntervalMinutes": 2,
                  "PeakHours": ["07:00-10:00", "17:00-20:00"] },
   "Telemetry": { "IntervalSeconds": 1, "ProcRoot": "/proc", "SysRoot": "/sys" },

@@ -86,7 +86,7 @@ chromium-browser \
 │  └──────────────────────────────────────────┘                 │                       │
 │                                                                │                       │
 │  ┌─────────────── Docker: deskhub-api (:5000) ────────────────┴─────────┐             │
-│  │  ASP.NET Core (.NET 8/9)                                              │             │
+│  │  ASP.NET Core (.NET 10)                                               │             │
 │  │   ├─ UseStaticFiles / MapFallbackToFile("index.html")  ← wwwroot      │             │
 │  │   ├─ Minimal API / Controllers   /api/*                               │             │
 │  │   ├─ SignalR Hub                 /hubs/dashboard                      │             │
@@ -94,7 +94,7 @@ chromium-browser \
 │  └───────────────┬──────────────────────────────────┬────────────────────┘             │
 │                  │ EF Core                          │ HTTP (outbound)                  │
 │  ┌───────────────▼──────────────┐                   ▼                                  │
-│  │ Docker: deskhub-db           │        Open-Meteo API, Routing/Traffic API           │
+│  │ Docker: deskhub-postgres     │        Open-Meteo API, Routing/Traffic API           │
 │  │ PostgreSQL                   │                                                      │
 │  └──────────────────────────────┘                                                      │
 └───────────────────────────────────────────────────────────────────────────────────────┘
@@ -108,7 +108,7 @@ chromium-browser \
    - Stage 2 (`mcr.microsoft.com/dotnet/sdk`) — `dotnet publish`.
    - Stage 3 (`mcr.microsoft.com/dotnet/aspnet`) — runtime + копия `dist/` в `wwwroot/`.
 3. **Целевая платформа `linux/arm64`.** Сборка через `docker buildx build --platform linux/arm64` (на CI или на самом Pi). Все базовые образы обязаны иметь arm64-вариант.
-4. **docker-compose** поднимает `deskhub-api` и `deskhub-db`, с `restart: unless-stopped` и healthcheck'ами.
+4. **docker-compose** поднимает `api` (`deskhub-api`) и `postgres` (`deskhub-postgres`), с `restart: unless-stopped` и healthcheck'ами.
 5. **Телеметрия хоста.** Контейнер API получает доступ к метрикам хоста через read-only монтирование (`/proc`, `/sys/class/thermal`) или через отдельный лёгкий агент — детали в документации бэкенда.
 
 ### 4.3. Поток данных

@@ -1,0 +1,56 @@
+# Подробности: knowledge/Infrastructure/Compose_And_Pi.md
+name: deskhub
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: deskhub-api:latest
+    container_name: deskhub-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "127.0.0.1:5000:8080"   # только localhost: Kiosk работает на этом же устройстве
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      TZ: ${TZ:-Europe/Moscow}
+      ConnectionStrings__DefaultConnection: ${ConnectionStrings__DefaultConnection:?set in .env}
+      OpenMeteo__Latitude: ${OpenMeteo__Latitude}
+      OpenMeteo__Longitude: ${OpenMeteo__Longitude}
+      OpenMeteo__LocationName: ${OpenMeteo__LocationName}
+      OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
+      Traffic__Provider: ${Traffic__Provider:-TomTom}
+      Traffic__ApiKey: ${Traffic__ApiKey:-}
+      Telemetry__ProcRoot: /host/proc
+      Telemetry__SysRoot: /host/sys
+    volumes:
+      - /proc:/host/proc:ro     # метрики хоста для TelemetryWorker
+      - /sys:/host/sys:ro
+    logging: &default-logging
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+  postgres:
+    image: postgres:16-bookworm
+    container_name: deskhub-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-deskhub}
+      POSTGRES_USER: ${POSTGRES_USER:-deskhub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
+      TZ: ${TZ:-Europe/Moscow}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # Порт наружу не публикуется — БД доступна только сервису api.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging: *default-logging
+
+volumes:
+  pgdata:

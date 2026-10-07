@@ -8,10 +8,11 @@
 ## 1. Структура проекта
 
 ```
-frontend/
+src/deskhub-ui/
 ├── index.html
 ├── vite.config.ts
-├── tailwind.config.ts
+├── tailwind.config.js       # Tailwind v3
+├── postcss.config.js
 ├── tsconfig.json
 └── src/
     ├── main.tsx                  # точка входа, монтирование <App/>
@@ -45,6 +46,19 @@ frontend/
 ```
 
 Принцип: фича владеет своими компонентами, слайсом стора, маппингом DTO и тестами. `shared/` не импортирует из `features/`.
+
+### 1.1. Текущее состояние (Core Communication Layer)
+
+Дерево выше — **целевая** структура. Сейчас реализован только слой связи, в упрощённой раскладке:
+
+| Файл | Роль | Целевое место |
+|---|---|---|
+| `src/types/dashboard.ts` | TS-зеркало C#-моделей (`WeatherModel`, `TrafficModel`, `TelemetryModel`, `DashboardSnapshot`) | `shared/api/types.ts` |
+| `src/store/useDashboardStore.ts` | Единый Zustand-стор: `weather`, `traffic`, `telemetry`, `connectionStatus`, `isConnected` + экшены `setWeather/setTraffic/setTelemetry/applySnapshot/setConnectionStatus` | `shared/store/` + слайсы фич |
+| `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
+| `src/App.tsx` | Вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
+
+Перенос в целевую структуру — при появлении первых фич-виджетов; одновременно стор разбивается на слайсы (раздел 3.2). Уже есть: бесконечный реконнект, ретраи первого `start()`, snapshot после (пере)подключения, повторная попытка по событию `online`. Пока нет: защиты от устаревших push-сообщений по `updatedAt` (5.4) и watchdog с `location.reload()` (5.3).
 
 ---
 
@@ -156,7 +170,7 @@ interface DataSlice<T> {
 - Виджеты размещаются явным указанием `col-span-*` / `row-span-*` (и при необходимости `col-start-*`). Никакого автопотока, который может «переполнить» экран.
 - Конфигурация раскладки — декларативный массив в `features/dashboard/layout.ts` (см. `Feature_Dashboard.md`).
 
-### 4.3. Дизайн-токены (`tailwind.config.ts`)
+### 4.3. Дизайн-токены (`tailwind.config.js`)
 
 ```ts
 theme: {
@@ -285,7 +299,7 @@ export const HubEvents = {
   WeatherUpdated:   'WeatherUpdated',
   TrafficUpdated:   'TrafficUpdated',
   TelemetryTick:    'TelemetryTick',
-  SettingsChanged:  'SettingsChanged',
+  SettingsChanged:  'SettingsChanged',   // ещё не реализовано на бэкенде
 } as const;
 
 // shared/api/signalr/bindings.ts
@@ -331,7 +345,7 @@ const status = useHubStatus(); // селектор connection.status
 ## 7. Сборка и интеграция с бэкендом
 
 - `vite.config.ts`:
-  - `build.outDir` → `../backend/src/DeskHub.Api/wwwroot` (или копирование в Docker stage);
+  - `build.outDir` → `../DeskHub.Api/wwwroot` (`emptyOutDir: true`); тот же путь используется в Docker stage 1;
   - `server.proxy`: `/api` и `/hubs` (с `ws: true`) → `http://localhost:5000` для локальной разработки;
   - `build.target: 'chrome120'` — только современный Chromium, без лишних полифиллов.
 - Хэшированные имена ассетов; `index.html` отдаётся бэкендом с `Cache-Control: no-cache`, чтобы после обновления контейнера киоск подхватил новую версию.
