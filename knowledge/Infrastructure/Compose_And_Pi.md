@@ -35,10 +35,12 @@ name: deskhub
 
 services:
   api:
+    # build — локальная сборка (docker compose build); image — имя в Docker Hub:
+    # на Mac образ собирается и пушится, на Raspberry Pi deploy.sh делает docker compose pull
     build:
       context: .
       dockerfile: Dockerfile
-    image: deskhub-api:latest
+    image: artembarabash/deskhub:latest
     container_name: deskhub-api
     restart: unless-stopped
     # Массив календарей (Calendar__Sources__N__Url/Color) передаётся из .env целиком — перечислять в environment неудобно
@@ -166,13 +168,14 @@ sudo raspi-config nonint do_blanking 1
 # 3. Убедиться, что используется labwc (дефолт Bookworm для Pi 5 с конца 2024)
 #    raspi-config → Advanced Options → Wayland → labwc
 
-# 4. Каталог проекта
-mkdir -p ~/deskhub && cd ~/deskhub
-#    сюда: docker-compose.yml, .env, deploy/pi/kiosk.sh
+# 4. Каталог проекта и файлы (копируются с Mac, см. раздел 5.1)
+mkdir -p ~/deskhub
+#    с Mac: scp docker-compose.yml .env deploy.sh pi@deskhub.local:~/deskhub/
+#    плюс kiosk.sh: scp deploy/pi/kiosk.sh pi@deskhub.local:~/deskhub/ (раздел 4)
+cd ~/deskhub && chmod +x deploy.sh && chmod 600 .env
 
-# 5. Первый запуск
-docker compose build     # или docker compose pull, если образ публикуется в registry
-docker compose up -d
+# 5. Первый запуск — тем же скриптом, что и обновления
+./deploy.sh
 curl -fsS http://localhost:5000/health   # → Healthy
 ```
 
@@ -180,11 +183,19 @@ curl -fsS http://localhost:5000/health   # → Healthy
 
 ## 4. Kiosk: запуск Chromium
 
-### 4.1. `deploy/pi/kiosk.sh`
+### 4.1. `deploy/pi/kiosk.sh` (в репозитории; на Pi — `~/deskhub/kiosk.sh`)
 
 ```bash
 #!/usr/bin/env bash
 # DeskHub Kiosk launcher: ждёт готовности API и держит Chromium запущенным.
+#
+# Установка на Raspberry Pi (один раз):
+#   scp deploy/pi/kiosk.sh pi@deskhub.local:~/deskhub/
+#   chmod +x ~/deskhub/kiosk.sh
+#   echo '"$HOME/deskhub/kiosk.sh" &' >> ~/.config/labwc/autostart
+# Подробности: knowledge/Infrastructure/Compose_And_Pi.md, раздел 4.
+#
+# После деплоя новой версии фронтенд перезагружается сам (новый InstanceId бэкенда) — перезапускать Chromium не нужно.
 set -u
 
 URL="http://localhost:5000"
@@ -192,6 +203,7 @@ HEALTH_URL="$URL/health"
 WAIT_TIMEOUT_SEC=300          # сколько ждать API при холодном старте
 LOG="$HOME/.cache/deskhub-kiosk.log"
 
+mkdir -p "$(dirname "$LOG")"
 log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
 
 # Chromium в Bookworm называется chromium-browser, в более новых сборках — chromium
@@ -237,7 +249,8 @@ done
 ```
 
 ```bash
-chmod +x ~/deskhub/deploy/pi/kiosk.sh
+scp deploy/pi/kiosk.sh pi@deskhub.local:~/deskhub/   # с Mac
+chmod +x ~/deskhub/kiosk.sh                          # на Pi
 ```
 
 ### 4.2. Флаги Chromium
@@ -264,7 +277,7 @@ chmod +x ~/deskhub/deploy/pi/kiosk.sh
 ```bash
 mkdir -p ~/.config/labwc
 cat >> ~/.config/labwc/autostart <<'EOF'
-"$HOME/deskhub/deploy/pi/kiosk.sh" &
+"$HOME/deskhub/kiosk.sh" &
 EOF
 ```
 
@@ -275,18 +288,56 @@ EOF
 
 ## 5. Эксплуатация
 
-### 5.1. Обновление
+### 5.1. Деплой и обновление: Mac → Docker Hub → Pi
 
-```bash
-cd ~/deskhub
-# зафиксировать новый тег в .env: DESKHUB_IMAGE_TAG=<sha>
-docker compose build api   # или: docker compose pull api
-docker compose up -d api          # миграции применяются при старте
-docker image prune -f
+Образ собирается на Mac (Apple Silicon — тоже arm64, сборка нативная, без эмуляции) и публикуется в Docker Hub как **`artembarabash/deskhub:latest`**; на Pi нет исходников — только `docker-compose.yml`, `.env` и `deploy.sh` в `~/deskhub`.
+
+```
+Mac                                         Docker Hub                       Raspberry Pi 5
+docker build --platform linux/arm64   →    artembarabash/deskhub:latest  →  ~/deskhub/deploy.sh
+docker push                                                                  pull → up -d → prune
 ```
 
-- Chromium перезапускать не нужно: SignalR-клиент переподключится, а фронтенд при обнаружении новой версии сам выполнит `location.reload()` (`Frontend_react/Core.md`, раздел 7).
-- **Откат:** вернуть предыдущий тег в `.env` и повторить `up -d`. Если в новой версии были миграции — сначала восстановить бэкап БД.
+**На Mac** (один раз `docker login`):
+
+```bash
+docker build --platform linux/arm64 -t artembarabash/deskhub:latest . && docker push artembarabash/deskhub:latest
+```
+
+**В `docker-compose.yml`** у сервиса `api` есть и `build` (локальная сборка `docker compose build` на машине разработчика), и `image: artembarabash/deskhub:latest` — имя в реестре: `docker compose pull` на Pi скачивает его, а `up -d` берёт скачанный образ (собирать без `--build` compose не пытается).
+
+**На Pi — `deploy.sh`** (лежит в корне репозитория, копируется в `~/deskhub`):
+
+```bash
+#!/bin/bash
+# Переходим в директорию проекта на Raspberry Pi
+cd ~/deskhub || exit
+
+echo "Pulling latest images..."
+docker compose pull
+
+echo "Starting containers..."
+docker compose up -d
+
+echo "Cleaning up old images..."
+docker image prune -f
+
+echo "Deploy complete!"
+```
+
+| Шаг | Что происходит |
+|---|---|
+| `docker compose pull` | Скачивает `artembarabash/deskhub:latest` и `postgres:16-bookworm` |
+| `docker compose up -d` | Пересоздаёт только контейнеры с изменившимся образом/конфигурацией; миграции БД применяются при старте API; данные — в томе `pgdata` |
+| `docker image prune -f` | Удаляет «висячие» старые образы — SD-карта не забивается |
+
+**Первая установка:** раздел 3 (Docker, автологин), затем `mkdir -p ~/deskhub`, скопировать с Mac `docker-compose.yml`, `.env` (заполненный — секреты только здесь) и `deploy.sh` (`scp … pi@deskhub.local:~/deskhub/`), `chmod +x deploy.sh`, `chmod 600 .env`, `./deploy.sh`. **Обновление:** push с Mac → `./deploy.sh` на Pi (или `ssh pi@deskhub.local '~/deskhub/deploy.sh'`). Если изменились `docker-compose.yml` или набор переменных в `.env` — сначала скопировать их на Pi.
+
+Особенности и ограничения:
+- **Фронтенд после обновления — автоматически.** Новый контейнер отдаёт новый `InstanceId` в снимке; киоск переподключается к SignalR, видит другой id и сам делает `location.reload()` — через пару секунд на экране новая сборка (`Frontend_react/Core.md`, раздел 7). Перезапускать Chromium не нужно.
+- **Откат.** Тег один — `latest`, поэтому откатиться можно только пересборкой нужного коммита. Для быстрого отката стоит дополнительно пушить тег версии (`-t artembarabash/deskhub:$(git rev-parse --short HEAD)`) и при необходимости временно указывать его в `image:`. Если в новой версии были миграции — сначала восстановить бэкап БД (5.2).
+- **Видимость образа.** Репозиторий Docker Hub по умолчанию публичный. Секретов в образе нет (`.env` в `.dockerignore`, ссылки календарей и пароли — только в рантайме), но код приложения виден. Приватный репозиторий — в настройках Docker Hub, тогда на Pi нужен `docker login`.
+- На Pi **не** запускать `docker compose build` / `up --build` — исходников там нет.
 
 ### 5.2. Бэкап PostgreSQL
 

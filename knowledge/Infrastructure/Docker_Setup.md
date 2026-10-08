@@ -161,19 +161,15 @@ docker run --privileged --rm tonistiigi/binfmt --install arm64
 # Один раз: builder с поддержкой multi-platform
 docker buildx create --name deskhub --use
 
-# Сборка и публикация в registry
-docker buildx build \
-  --platform linux/arm64 \
-  -t ghcr.io/<owner>/deskhub-api:$(git rev-parse --short HEAD) \
-  -t ghcr.io/<owner>/deskhub-api:latest \
-  --push .
+# Сборка и публикация в Docker Hub (основной путь деплоя — Compose_And_Pi.md, 5.1)
+docker build --platform linux/arm64 -t artembarabash/deskhub:latest . && docker push artembarabash/deskhub:latest
 ```
 
 Без registry — перенос образа файлом:
 
 ```bash
-docker buildx build --platform linux/arm64 -t deskhub-api:latest --load .
-docker save deskhub-api:latest | gzip | ssh pi@deskhub.local 'gunzip | docker load'
+docker buildx build --platform linux/arm64 -t artembarabash/deskhub:latest --load .
+docker save artembarabash/deskhub:latest | gzip | ssh pi@deskhub.local 'gunzip | docker load'
 ```
 
 ### 5.2. Вариант B — прямо на Raspberry Pi
@@ -190,12 +186,14 @@ docker compose build        # платформа хоста = linux/arm64, ни�
 - uses: docker/setup-qemu-action@v3
 - uses: docker/setup-buildx-action@v3
 - uses: docker/login-action@v3
-  with: { registry: ghcr.io, username: ${{ github.actor }}, password: ${{ secrets.GITHUB_TOKEN }} }
+  with: { username: ${{ secrets.DOCKERHUB_USERNAME }}, password: ${{ secrets.DOCKERHUB_TOKEN }} }   # Docker Hub
 - uses: docker/build-push-action@v6
   with:
     platforms: linux/arm64
     push: true
-    tags: ghcr.io/${{ github.repository_owner }}/deskhub-api:${{ github.sha }}
+    tags: |
+      artembarabash/deskhub:latest
+      artembarabash/deskhub:${{ github.sha }}
     cache-from: type=gha
     cache-to: type=gha,mode=max
 ```
@@ -206,8 +204,8 @@ docker compose build        # платформа хоста = linux/arm64, ни�
 
 ## 6. Версионирование образа
 
-- Тег = короткий SHA коммита + `latest`. На устройстве в `.env` фиксируется конкретный тег (`DESKHUB_IMAGE_TAG`), чтобы обновление было явным и откатываемым.
-- Версия приложения (`__APP_VERSION__` во фронтенде, `InformationalVersion` в .NET) передаётся через `--build-arg APP_VERSION=<sha>` и отображается на экране настроек.
+- Сейчас публикуется только `artembarabash/deskhub:latest`, и Pi всегда берёт его (`deploy.sh` → `docker compose pull`). Для быстрого отката рекомендуется дополнительно пушить тег с коротким SHA коммита и при откате временно указывать его в `image:` в `docker-compose.yml` на Pi (`Compose_And_Pi.md`, 5.1).
+- Автоперезагрузка киоска после деплоя сделана без номера версии — по `InstanceId` запуска бэкенда (`Frontend_react/Core.md`, раздел 7). (План) Версия приложения через `--build-arg APP_VERSION=<sha>` — для отображения на экране настроек.
 
 ---
 
@@ -215,13 +213,13 @@ docker compose build        # платформа хоста = linux/arm64, ни�
 
 ```bash
 # Архитектура образа
-docker image inspect deskhub-api:latest --format '{{.Os}}/{{.Architecture}}'   # → linux/arm64
+docker image inspect artembarabash/deskhub:latest --format '{{.Os}}/{{.Architecture}}'   # → linux/arm64
 
 # Размер (факт на .NET 10 / Ubuntu Noble + curl: ~380 MB)
-docker image ls deskhub-api
+docker image ls artembarabash/deskhub
 
 # Наличие фронтенда внутри
-docker run --rm --entrypoint ls deskhub-api:latest /app/wwwroot   # → index.html(.br/.gz)  assets/
+docker run --rm --entrypoint ls artembarabash/deskhub:latest /app/wwwroot   # → index.html(.br/.gz)  assets/
 ```
 
 > `dotnet publish` в .NET 10 автоматически создаёт пре-сжатые копии статики (`.br`, `.gz`) в `wwwroot`. `UseStaticFiles` их не использует (это умеет `MapStaticAssets`); на работу не влияет, только +~100 KB в образе.

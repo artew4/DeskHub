@@ -102,6 +102,8 @@ builder.Services.AddHostedService<CalendarWorker>();
 
 var app = builder.Build();
 
+app.Logger.LogInformation("DeskHub instance {InstanceId}", app.Services.GetRequiredService<DashboardState>().InstanceId);
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();

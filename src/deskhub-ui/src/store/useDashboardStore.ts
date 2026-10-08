@@ -15,6 +15,8 @@ interface DashboardState {
   telemetry: TelemetryModel | null
   calendar: CalendarModel | null
   serverTime: string | null
+  /** InstanceId бэкенда из первого снимка; другой id в следующем снимке — бэкенд перезапущен */
+  instanceId: string | null
 
   connectionStatus: ConnectionStatus
   isConnected: boolean
@@ -33,6 +35,20 @@ interface DashboardState {
   setScreen: (index: number) => void
   /** Любое касание экрана: перезапускает таймер автовозврата. */
   registerActivity: () => void
+}
+
+// ─── Автообновление фронтенда после деплоя ─────────────────────────────────
+let reloading = false
+
+/**
+ * Новый InstanceId = новый контейнер, а с ним, возможно, и новый фронтенд. index.html отдаётся с no-cache,
+ * ассеты — с хэшами в именах, поэтому обычная перезагрузка гарантированно подтягивает свежую сборку.
+ */
+function reloadForNewInstance(previous: string, next: string): void {
+  if (reloading) return
+  reloading = true
+  console.info(`[deskhub] backend restarted (${previous.slice(0, 8)} → ${next.slice(0, 8)}), reloading page`)
+  window.location.reload()
 }
 
 // ─── Автовозврат на главный экран ──────────────────────────────────────────
@@ -75,6 +91,7 @@ export const useDashboardStore = create<DashboardState>()((set, get) => ({
   traffic: null,
   telemetry: null,
   calendar: null,
+  instanceId: null,
   serverTime: null,
 
   connectionStatus: 'connecting',
@@ -86,14 +103,24 @@ export const useDashboardStore = create<DashboardState>()((set, get) => ({
   setCalendar: (calendar) => set((s) => (acceptCalendar(calendar, s.calendar) ? { calendar } : s)),
 
   // Каждая часть snapshot проходит ту же проверку свежести, что и push-события
-  applySnapshot: ({ weather, traffic, telemetry, calendar, serverTime }) =>
+  applySnapshot: (snapshot) => {
+    const knownInstance = get().instanceId
+    if (knownInstance !== null && knownInstance !== snapshot.instanceId) {
+      // Бэкенд перезапущен (деплой новой версии) — данные не применяем, перезагружаем страницу,
+      // чтобы Chromium скачал новый фронтенд из обновлённого контейнера
+      reloadForNewInstance(knownInstance, snapshot.instanceId)
+      return
+    }
+    const { weather, traffic, telemetry, calendar, serverTime, instanceId } = snapshot
     set((s) => ({
       weather: acceptWeather(weather, s.weather) ? weather : s.weather,
       traffic: acceptTraffic(traffic, s.traffic) ? traffic : s.traffic,
       telemetry: acceptTelemetry(telemetry, s.telemetry) ? telemetry : s.telemetry,
       calendar: acceptCalendar(calendar, s.calendar) ? calendar : s.calendar,
       serverTime,
-    })),
+      instanceId,
+    }))
+  },
 
   setConnectionStatus: (connectionStatus) =>
     set({ connectionStatus, isConnected: connectionStatus === 'connected' }),

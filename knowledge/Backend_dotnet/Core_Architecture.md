@@ -242,8 +242,11 @@ public sealed record SnapshotDto(
     TrafficDto? Traffic,
     TelemetrySnapshotDto? Telemetry,
     SettingsDto Settings,
+    string InstanceId,           // id запуска бэкенда: другой после переподключения → клиент перезагружает страницу
     DateTimeOffset ServerTime);   // клиент сверяет с локальными часами (Feature_Dashboard.md, 3.4)
 ```
+
+> **Текущая реализация** (`Models/DashboardSnapshot.cs`): `DashboardSnapshot(Weather, Traffic, Telemetry, Calendar, InstanceId, ServerTime)`. `InstanceId` — `public readonly string InstanceId = Guid.NewGuid().ToString("N")` в singleton `DashboardState`: один на процесс, новый после каждого перезапуска контейнера; пишется в лог при старте («DeskHub instance …»). Зачем — `Frontend_react/Core.md`, раздел 7.
 
 ### 5.3. DTO
 

@@ -79,5 +79,7 @@ export interface DashboardSnapshot {
   traffic: TrafficModel | null
   telemetry: TelemetryModel | null
   calendar: CalendarModel | null
+  /** Идентификатор запуска бэкенда — новый после каждого перезапуска/деплоя контейнера */
+  instanceId: string
   serverTime: string
 }

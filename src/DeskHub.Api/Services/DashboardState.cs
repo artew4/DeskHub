@@ -8,6 +8,9 @@ namespace DeskHub.Api.Services;
 /// </summary>
 public sealed class DashboardState(TimeProvider time)
 {
+    /// <summary>Идентификатор запуска: генерируется один раз при старте приложения (DashboardState — singleton).</summary>
+    public readonly string InstanceId = Guid.NewGuid().ToString("N");
+
     // Все данные — от воркеров; null до первого успешного обновления
     private volatile WeatherModel? _weather;
     private volatile TrafficModel? _traffic;
@@ -19,5 +22,5 @@ public sealed class DashboardState(TimeProvider time)
     public void SetTelemetry(TelemetryModel telemetry) => _telemetry = telemetry;
     public void SetCalendar(CalendarModel calendar) => _calendar = calendar;
 
-    public DashboardSnapshot GetSnapshot() => new(_weather, _traffic, _telemetry, _calendar, time.GetUtcNow());
+    public DashboardSnapshot GetSnapshot() => new(_weather, _traffic, _telemetry, _calendar, InstanceId, time.GetUtcNow());
 }
