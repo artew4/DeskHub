@@ -69,6 +69,7 @@ export const Room = memo(function Room({ isNight, layout }: { isNight: boolean; 
       <g transform={`translate(${rightShift} ${verticalShift})`}>
         <Shelf />
         <FloorPlant />
+        <FoodBowl />
       </g>
     </svg>
   )
@@ -200,6 +201,21 @@ function Shelf() {
       <rect x={512} y={96} width={7} height={22} rx={1} fill="#3B4A6B" />
       <rect x={520} y={100} width={6} height={18} rx={1} fill="#6B3B3B" />
       <rect x={527} y={94} width={7} height={24} rx={1} fill="#3B6B5A" />
+    </g>
+  )
+}
+
+/** Миска с кормом у растения. */
+function FoodBowl() {
+  return (
+    <g>
+      <ellipse cx={446} cy={263} rx={15} ry={3} fill="#000000" opacity={0.25} />
+      <path d="M432,254 L460,254 L456,263 L436,263 Z" fill="#3A5A8C" />
+      <ellipse cx={446} cy={254} rx={14} ry={3.2} fill="#4C72AE" />
+      <ellipse cx={446} cy={254} rx={10.5} ry={2} fill="#8B5E3C" />
+      <circle cx={442} cy={253.2} r={1.4} fill="#A87449" />
+      <circle cx={447} cy={252.8} r={1.4} fill="#A87449" />
+      <circle cx={451} cy={253.4} r={1.3} fill="#A87449" />
     </g>
   )
 }

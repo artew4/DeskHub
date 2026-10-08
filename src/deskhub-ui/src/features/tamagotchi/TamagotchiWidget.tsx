@@ -4,15 +4,18 @@ import { useClock } from '../clock/useClock'
 import { Cat } from './Cat'
 import { STATE_LABELS, roomLayout, type RoomLayout } from './catStates'
 import { Room } from './Room'
-import { useCatBrain } from './useCatBrain'
+import { YARN_RADIUS, useCatBrain, type YarnState } from './useCatBrain'
 
 const CAT_NAME = 'Мурзик'
+
+/** Спокойный шаг — мягкий ease-in-out (длительность 2.2–5 с по расстоянию, ≈ 3 с через комнату); бег и прыжки — линейно. */
+const WALK_EASING = 'cubic-bezier(0.45, 0, 0.55, 1)'
 // Размер SVG кота и положение точки «лап» внутри него
 const CAT_BOX = { width: 96, height: 72, feetX: 48, feetY: 64 }
 
 /**
- * Виртуальный питомец на месте пробок (вне окна Пн–Пт 10:00–13:20).
- * Слои: комната (статичный SVG) → кружка → кот (HTML-слой, движется transform-переходом) → подписи.
+ * Виртуальный питомец на месте пробок (вне окна Пн–Пт 10:00–13:20). Без подписей — только комната и кот.
+ * Слои: комната (статичный SVG) → кружка → клубок → кот (HTML-слой, движется transform-переходом).
  */
 export const TamagotchiWidget = memo(function TamagotchiWidget() {
   const containerRef = useRef<HTMLElement>(null)
@@ -41,9 +44,9 @@ function CatRoom({ width, height }: { width: number; height: number }) {
   const hour = useClock('minute').getHours()
   const isNight = hour < 7 || hour >= 20
   const layout = useMemo(() => roomLayout(width, height), [width, height])
-  const { frame, mugOnShelf, pokedAt, poke } = useCatBrain(isNight, layout)
+  const { frame, mugOnShelf, yarn, pokedAt, poke } = useCatBrain(isNight, layout)
 
-  const moving = frame.moveMs >= 1000 ? 'ease-in-out' : 'linear' // переходы между зонами — 2 с ease-in-out; «тыгыдык» — рывками
+  const easing = frame.pose === 'run' ? 'linear' : WALK_EASING
   const catTransform = `translate3d(${frame.x - CAT_BOX.feetX}px, ${frame.y - CAT_BOX.feetY}px, 0)`
 
   return (
@@ -51,10 +54,11 @@ function CatRoom({ width, height }: { width: number; height: number }) {
       <Room isNight={isNight} layout={layout} />
 
       <Mug onShelf={mugOnShelf} layout={layout} />
+      <Yarn yarn={yarn} />
 
       <div
         className="absolute left-0 top-0 will-change-transform"
-        style={{ transform: catTransform, transition: `transform ${frame.moveMs}ms ${moving}` }}
+        style={{ transform: catTransform, transition: `transform ${frame.moveMs}ms ${easing}` }}
       >
         <button type="button" onClick={poke} className="block cursor-none rounded-full outline-none" aria-label={`Погладить: ${CAT_NAME}`}>
           <Cat pose={frame.pose} facing={frame.facing} />
@@ -68,11 +72,30 @@ function CatRoom({ width, height }: { width: number; height: number }) {
         )}
       </div>
 
-      {/* Шапка: имя и занятие — как подпись в инди-игре */}
-      <div className="pointer-events-none absolute left-3 top-3 flex items-center gap-2 rounded-full bg-black/40 px-3 py-1 text-label">
-        <span className="font-semibold text-fg-primary">{CAT_NAME}</span>
-        <span className="text-fg-secondary">{STATE_LABELS[frame.state]}</span>
-      </div>
+    </div>
+  )
+}
+
+/** Клубок ниток на полу: при пинке катится (смещение + поворот на путь/радиус), с мягким замедлением. */
+function Yarn({ yarn }: { yarn: YarnState }) {
+  const r = YARN_RADIUS
+  return (
+    <div
+      className="absolute left-0 top-0"
+      style={{
+        transform: `translate3d(${yarn.x - r}px, ${yarn.y - 2 * r}px, 0)`,
+        transition: 'transform 900ms cubic-bezier(0.2, 0.8, 0.3, 1)',
+      }}
+      aria-hidden
+    >
+      <svg width={2 * r} height={2 * r} viewBox={`${-r} ${-r} ${2 * r} ${2 * r}`} className="overflow-visible">
+        <g style={{ transform: `rotate(${yarn.angle}deg)`, transition: 'transform 900ms cubic-bezier(0.2, 0.8, 0.3, 1)' }}>
+          <circle r={r} fill="#C8577E" />
+          <path d={`M${-r + 2},-2 q${r - 2},-6 ${2 * r - 4},0 M${-r + 2},3 q${r - 2},-6 ${2 * r - 4},0 M-3,${-r + 1} q-5,${r - 1} 0,${2 * r - 2}`} fill="none" stroke="#E98BAE" strokeWidth={1.2} strokeLinecap="round" />
+          {/* Свободный кончик нитки */}
+          <path d={`M${r - 2},4 q6,4 12,2`} fill="none" stroke="#C8577E" strokeWidth={1.2} strokeLinecap="round" />
+        </g>
+      </svg>
     </div>
   )
 }
