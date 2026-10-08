@@ -92,6 +92,26 @@ async function startWithRetry(attempt = 0): Promise<void> {
   }
 }
 
+// ─── Вызовы хаба (клиент → сервер) ────────────────────────────────────────
+
+/** Имена методов DashboardHub — зеркало src/DeskHub.Api/Hubs/DashboardHub.cs */
+export const HubMethods = {
+  ReportTrafficVisible: 'ReportTrafficVisible',
+  ForceTrafficRefresh: 'ForceTrafficRefresh',
+} as const
+
+/** Вызов без ожидания результата; без связи — тихо пропускается (после реконнекта эффект видимости повторит пинг). */
+function invokeIfConnected(method: string): void {
+  if (connection.state !== HubConnectionState.Connected) return
+  connection.invoke(method).catch((error: unknown) => console.warn(`[signalr] ${method} failed`, error))
+}
+
+/** Виджет пробок на экране — сервер не даст TrafficWorker уснуть (и разбудит спящий). */
+export const reportTrafficVisible = (): void => invokeIfConnected(HubMethods.ReportTrafficVisible)
+
+/** Данные пробок устарели — попросить сервер обновить сейчас (сервер ограничивает частоту). */
+export const forceTrafficRefresh = (): void => invokeIfConnected(HubMethods.ForceTrafficRefresh)
+
 let started = false
 
 /** Запускает единственное соединение приложения. Повторные вызовы игнорируются (StrictMode). */

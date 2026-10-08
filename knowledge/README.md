@@ -56,6 +56,8 @@
 | `TrafficUpdated` | `TrafficWorker` | `trafficSlice.apply` | 2–5 мин |
 | `TelemetryTick` | `TelemetryWorker` | `setTelemetry` | 1–2 с |
 | `CalendarUpdated` | `CalendarWorker` | `setCalendar` | 15 мин |
+
+Клиент → сервер (методы хаба): `ReportTrafficVisible` (пинг раз в 90 с, пока виден виджет пробок) и `ForceTrafficRefresh` (данные старше 15 мин) — «спящий режим» `TrafficWorker`.
 | `SettingsChanged` | API настроек | `ui.applySettings` | по событию |
 
 Любое изменение контракта (DTO, имя события, эндпоинт) **обязательно** отражается в документации обоих слоёв: `Frontend_react/Feature_Widgets.md` и `Backend_dotnet/Core_Architecture.md`.

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
+import { forceTrafficRefresh, reportTrafficVisible } from '../../services/signalrConnection'
+import { MAIN_SCREEN, useDashboardStore } from '../../store/useDashboardStore'
 import { TamagotchiWidget } from '../tamagotchi/TamagotchiWidget'
 import { TrafficWidget } from '../traffic/TrafficWidget'
 import { useTrafficWindow } from '../traffic/useTrafficWindow'
@@ -15,6 +17,10 @@ const FLICK_MIN_PX = 20
 const AXIS_LOCK_PX = 10
 /** Сколько пробки висят вне рабочего окна без касаний, прежде чем вернётся кот. */
 export const TRAFFIC_PEEK_MS = 30_000
+/** Пинг видимости пробок — сервер усыпляет TrafficWorker через 10 мин без пингов. */
+const VISIBILITY_PING_MS = 90_000
+/** Данные пробок старше — при показе виджета попросить сервер обновить сразу. */
+const FORCE_REFRESH_AFTER_MS = 15 * 60_000
 
 const TRANSITION = 'transform 500ms cubic-bezier(0.2, 0.8, 0.2, 1)' // ease-kiosk (ease-out)
 
@@ -40,6 +46,9 @@ interface Gesture {
  * в style через ref: во время свайпа React не перерисовывается. Оба виджета смонтированы постоянно
  * (кот живёт своей жизнью и вне экрана), неактивный — inert.
  *
+ * Пока пробки видны (ячейка + главный экран + связь), сервер получает пинг ReportTrafficVisible раз в 90 с
+ * (и ForceTrafficRefresh, если данные старше 15 мин) — иначе TrafficWorker засыпает и не ходит в Яндекс.
+ *
  * Конфликт с горизонтальной каруселью экранов (ScreenCarousel): эта карусель получает pointer-события
  * первой. Если жест вертикальный — забирает его (pointer capture + stopPropagation для pointermove),
  * и экранная карусель жест не видит; если горизонтальный — отказывается, и жест обрабатывает ScreenCarousel.
@@ -47,6 +56,10 @@ interface Gesture {
 export function BottomLeftCarousel() {
   const defaultSlide: Slide = useTrafficWindow() ? 'traffic' : 'cat'
   const [shown, setShown] = useState<Slide>(defaultSlide)
+  // Пробки действительно видны: открыты в ячейке, активен главный экран и есть связь с сервером
+  const onMainScreen = useDashboardStore((s) => s.activeScreenIndex === MAIN_SCREEN)
+  const isConnected = useDashboardStore((s) => s.isConnected)
+  const trafficVisible = shown === 'traffic' && onMainScreen && isConnected
 
   const shownRef = useRef<Slide>(defaultSlide)
   const defaultRef = useRef<Slide>(defaultSlide)
@@ -118,6 +131,16 @@ export function BottomLeftCarousel() {
     clearPeek()
     if (shownRef.current !== defaultSlide) goTo(defaultSlide, -1)
   }, [defaultSlide, goTo, clearPeek])
+
+  // ─── «Спящий режим» TrafficWorker: сообщаем серверу, что пробки на экране ──
+  useEffect(() => {
+    if (!trafficVisible) return
+    reportTrafficVisible() // спящий воркер проснётся сразу
+    const updatedAt = useDashboardStore.getState().traffic?.updatedAt
+    if (!updatedAt || Date.now() - Date.parse(updatedAt) > FORCE_REFRESH_AFTER_MS) forceTrafficRefresh()
+    const ping = setInterval(reportTrafficVisible, VISIBILITY_PING_MS)
+    return () => clearInterval(ping) // пробки скрыты — пинги прекращаются, через 10 мин воркер уснёт
+  }, [trafficVisible])
 
   // Начальная расстановка слоёв без анимации
   useLayoutEffect(() => {

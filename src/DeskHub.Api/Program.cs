@@ -81,6 +81,7 @@ if (builder.Configuration[$"{TrafficOptions.SectionName}:Provider"] == "Mock")
     builder.Services.AddSingleton<ITrafficProvider, MockTrafficProvider>();
 else
     builder.Services.AddSingleton<ITrafficProvider, YandexHtmlTrafficProvider>();
+builder.Services.AddSingleton<TrafficActivityTracker>(); // «спящий режим» воркера, пишет хаб
 builder.Services.AddHostedService<TrafficWorker>();
 
 // --- Календари: несколько iCal-фидов (iCloud, Outlook, …), у каждого свой цвет ---

@@ -10,6 +10,10 @@ public sealed class TrafficOptions
     [Range(1, 60)]
     public int IntervalMinutes { get; init; } = 5;
 
+    /// <summary>Через сколько минут без пингов видимости виджета TrafficWorker засыпает («спящий режим»).</summary>
+    [Range(0.1, 240)]
+    public double IdleMinutes { get; init; } = 10;
+
     /// <summary>"Yandex" — реальные данные с Яндекс Карт; "Mock" — генератор для разработки без сети.</summary>
     [Required, RegularExpression("Yandex|Mock")]
     public string Provider { get; init; } = "Yandex";

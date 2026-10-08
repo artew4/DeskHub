@@ -55,7 +55,7 @@ src/deskhub-ui/
 |---|---|---|
 | `src/types/dashboard.ts` | TS-зеркало C#-моделей (`WeatherModel`, `TrafficModel`, `TelemetryModel`, `DashboardSnapshot`) | `shared/api/types.ts` |
 | `src/store/useDashboardStore.ts` | Единый Zustand-стор: `weather`, `traffic`, `telemetry`, `calendar`, `connectionStatus`, `isConnected`, `activeScreenIndex` + экшены `setWeather/setTraffic/setTelemetry/applySnapshot/setConnectionStatus`, навигация `setScreen/nextScreen/prevScreen/registerActivity` и таймер автовозврата (30 с) | `shared/store/` + слайсы фич |
-| `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
+| `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, `HubMethods` + `reportTrafficVisible()` / `forceTrafficRefresh()` (вызовы хаба без ожидания, только при связи), бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
 | `src/App.tsx` | Корень 1024×600 (без отступа — `p-4` внутри экранов), `ScreenCarousel` с `MainScreen` + `SystemScreen`; вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
 | `src/components/ScreenCarousel.tsx` | Карусель экранов: CSS `translate3d` + Pointer Events, свайп за пальцем через ref, порог 100 px, индикатор экранов (`Feature_Dashboard.md`, 8.2) | `app/` |
 | `src/features/dashboard/MainScreen.tsx` | Главный экран, сетка 12×6 (`gap-3 p-4`): часы (кол. 1–7, стр. 1–3), мини-карусель «пробки ↔ кот» (кол. 1–7, стр. 4–6), погода (кол. 8–12, стр. 1–3), календарь (кол. 8–12, стр. 4–6) | на месте |
