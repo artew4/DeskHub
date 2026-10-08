@@ -138,6 +138,7 @@ public static class HubEvents          // зеркало HubEvents в src/deskhu
     public const string WeatherUpdated = nameof(WeatherUpdated);
     public const string TrafficUpdated = nameof(TrafficUpdated);
     public const string TelemetryTick  = nameof(TelemetryTick);
+    public const string CalendarUpdated = nameof(CalendarUpdated);
 }
 ```
 
@@ -160,6 +161,9 @@ public sealed class DashboardNotifier(IHubContext<DashboardHub> hub)
 
     public Task SendTelemetryUpdate(TelemetryModel telemetry, CancellationToken ct = default) =>
         hub.Clients.All.SendAsync(HubEvents.TelemetryTick, telemetry, ct);
+
+    public Task SendCalendarUpdate(CalendarModel calendar, CancellationToken ct = default) =>
+        hub.Clients.All.SendAsync(HubEvents.CalendarUpdated, calendar, ct);
 }
 ```
 
@@ -194,7 +198,7 @@ builder.Services
 
 Singleton, хранящий **последнее известное значение** каждого виджета и кольцевой буфер истории телеметрии (120 точек).
 
-> **Текущая реализация** (`Services/DashboardState.cs`): хранит последние `WeatherModel`, `TrafficModel`, `TelemetryModel` — все от воркеров (`WeatherWorker`, `TrafficWorker`, `TelemetryWorker`), `null` до первого успешного обновления. Заглушек (`StubData`) больше нет. Обновляется только через `DashboardNotifier`. Кольцевой буфер истории ещё не реализован. Важно: snapshot не должен генерировать данные «на лету» с текущим временем — иначе при реконнекте он затрёт более свежие push-данные несмотря на проверку `updatedAt` на клиенте.
+> **Текущая реализация** (`Services/DashboardState.cs`): хранит последние `WeatherModel`, `TrafficModel`, `TelemetryModel`, `CalendarModel` — все от воркеров (`WeatherWorker`, `TrafficWorker`, `TelemetryWorker`, `AppleCalendarWorker`), `null` до первого успешного обновления. Заглушек (`StubData`) больше нет. Обновляется только через `DashboardNotifier`. Кольцевой буфер истории ещё не реализован. Важно: snapshot не должен генерировать данные «на лету» с текущим временем — иначе при реконнекте он затрёт более свежие push-данные несмотря на проверку `updatedAt` на клиенте.
 
 ```csharp
 public sealed class DashboardState

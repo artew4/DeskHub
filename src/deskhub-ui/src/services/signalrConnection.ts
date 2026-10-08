@@ -1,12 +1,13 @@
 import { HttpTransportType, HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr'
 import { useDashboardStore, type ConnectionStatus } from '../store/useDashboardStore'
-import type { DashboardSnapshot, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
+import type { CalendarModel, DashboardSnapshot, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
 
 // Имена событий — зеркало src/DeskHub.Api/Hubs/HubEvents.cs
 export const HubEvents = {
   WeatherUpdated: 'WeatherUpdated',
   TrafficUpdated: 'TrafficUpdated',
   TelemetryTick: 'TelemetryTick',
+  CalendarUpdated: 'CalendarUpdated',
 } as const
 
 const HUB_URL = '/hubs/dashboard'
@@ -60,6 +61,7 @@ async function loadSnapshot(): Promise<void> {
 function bindEvents(): void {
   connection.on(HubEvents.WeatherUpdated, (weather: WeatherModel) => store().setWeather(weather))
   connection.on(HubEvents.TrafficUpdated, (traffic: TrafficModel) => store().setTraffic(traffic))
+  connection.on(HubEvents.CalendarUpdated, (calendar: CalendarModel) => store().setCalendar(calendar))
   connection.on(HubEvents.TelemetryTick, (telemetry: TelemetryModel) => store().setTelemetry(telemetry))
 
   connection.onreconnecting(() => setStatus('reconnecting'))

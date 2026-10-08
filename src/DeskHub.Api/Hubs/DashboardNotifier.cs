@@ -24,6 +24,12 @@ public sealed class DashboardNotifier(IHubContext<DashboardHub> hub, DashboardSt
         return hub.Clients.All.SendAsync(HubEvents.TrafficUpdated, traffic, ct);
     }
 
+    public Task SendCalendarUpdate(CalendarModel calendar, CancellationToken ct = default)
+    {
+        state.SetCalendar(calendar);
+        return hub.Clients.All.SendAsync(HubEvents.CalendarUpdated, calendar, ct);
+    }
+
     public Task SendTelemetryUpdate(TelemetryModel telemetry, CancellationToken ct = default)
     {
         state.SetTelemetry(telemetry);

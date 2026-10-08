@@ -17,10 +17,10 @@ src/deskhub-ui/
 └── src/
     ├── main.tsx                  # точка входа, монтирование <App/>
     ├── app/
-    │   ├── App.tsx               # корневой лэйаут 1024×600, провайдеры
+    │   ├── App.tsx               # корневой лэйаут 1280×800, провайдеры
     │   ├── AppShell.tsx          # экраны + оверлеи (статус связи, ночной режим)
     │   ├── KioskGuards.tsx       # блокировка контекстного меню, жестов, курсора
-    │   └── DevFrame.tsx          # только DEV: рамка 1024×600 в центре окна
+    │   └── DevFrame.tsx          # только DEV: рамка 1280×800 в центре окна
     ├── features/
     │   ├── dashboard/            # главный экран, часы, сетка (Feature_Dashboard.md)
     │   ├── weather/              # виджет погоды           (Feature_Widgets.md)
@@ -54,15 +54,15 @@ src/deskhub-ui/
 | Файл | Роль | Целевое место |
 |---|---|---|
 | `src/types/dashboard.ts` | TS-зеркало C#-моделей (`WeatherModel`, `TrafficModel`, `TelemetryModel`, `DashboardSnapshot`) | `shared/api/types.ts` |
-| `src/store/useDashboardStore.ts` | Единый Zustand-стор: `weather`, `traffic`, `telemetry`, `connectionStatus`, `isConnected`, `activeScreenIndex` + экшены `setWeather/setTraffic/setTelemetry/applySnapshot/setConnectionStatus`, навигация `setScreen/nextScreen/prevScreen/registerActivity` и таймер автовозврата (30 с) | `shared/store/` + слайсы фич |
+| `src/store/useDashboardStore.ts` | Единый Zustand-стор: `weather`, `traffic`, `telemetry`, `calendar`, `connectionStatus`, `isConnected`, `activeScreenIndex` + экшены `setWeather/setTraffic/setTelemetry/applySnapshot/setConnectionStatus`, навигация `setScreen/nextScreen/prevScreen/registerActivity` и таймер автовозврата (30 с) | `shared/store/` + слайсы фич |
 | `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
-| `src/App.tsx` | Корень 1024×600 (без отступа — `p-4` внутри экранов), `ScreenCarousel` с `MainScreen` + `SystemScreen`; вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
+| `src/App.tsx` | Корень 1280×800 (без отступа — `p-6` внутри экранов), `ScreenCarousel` с `MainScreen` + `SystemScreen`; вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
 | `src/components/ScreenCarousel.tsx` | Карусель экранов: CSS `translate3d` + Pointer Events, свайп за пальцем через ref, порог 100 px, индикатор экранов (`Feature_Dashboard.md`, 8.2) | `app/` |
 | `src/features/dashboard/MainScreen.tsx` | Главный экран, сетка 12×6 (`gap-3 p-4`): часы (кол. 1–7, стр. 1–3), пробки (Пн–Пт 10:00–13:20) или кот (кол. 1–7, стр. 4–6), погода (кол. 8–12, стр. 1–3), календарь (кол. 8–12, стр. 4–6) | на месте |
 | `src/features/dashboard/SystemScreen.tsx` | Системный экран: заголовок «Система» + подсказка, телеметрия (кол. 1–5, стр. 2–4) | на месте |
 | `src/features/tamagotchi/` | `TamagotchiWidget.tsx`, `Room.tsx`, `Cat.tsx`, `catStates.ts` (состояния, веса, планирование — чистые функции), `useCatBrain.ts` (цепочка `setTimeout`) — `Feature_Dashboard.md`, 9 | на месте |
 | `src/features/traffic/trafficWindow.ts`, `useTrafficWindow.ts` | Окно показа пробок: Пн–Пт 10:00–13:20 | на месте |
-| `src/features/calendar/` | `CalendarWidget.tsx` + `calendar.ts` (сетка месяца на `Date`, неделя с Пн, заголовок «Октябрь 2026») | на месте |
+| `src/features/calendar/` | `CalendarWidget.tsx` (органайзер: сетка месяца с точками событий + повестка сегодня/завтра) + `calendar.ts` (сетка на `Date`, дни с событиями, подписи времени, фаза «идёт сейчас») | на месте |
 | `src/features/weather/` | `WeatherWidget.tsx`, `weather.mappers.ts` (температура с U+2212, УФ-шкала, фильтр часов), `weatherIcons.tsx` (ключ иконки → lucide) | на месте |
 | `src/features/clock/` | `ClockWidget.tsx`, `AnalogClock.tsx` (rAF + useRef, 60 FPS без ре-рендеров), `DigitalDate.tsx`, `clockMath.ts`, `useClock.ts` (время, выровненное по секунде/минуте; используется и погодой) | на месте |
 | `src/features/traffic/` | `TrafficWidget.tsx`, `RouteMap.tsx` (SVG-схема ТТК vs МКАД), `traffic.mappers.ts` (цвета загруженности, формат длительности, самый быстрый маршрут) | на месте |
@@ -157,28 +157,29 @@ interface DataSlice<T> {
 
 ---
 
-## 4. UI-кит и сетка 1024×600
+## 4. UI-кит и сетка 1280×800
 
 ### 4.1. Корневой лэйаут
 
 ```
-┌──────────────────────────────── 1024 px ────────────────────────────────┐
-│ padding 16 px                                                            │
+┌──────────────────────────────── 1280 px ────────────────────────────────┐
+│ padding 24 px (p-6 — внутри каждого экрана карусели)                     │
 │ ┌────────────────────────────────────────────────────────────────────┐   │
-│ │                         Контентная область                         │   │ 600
-│ │                           992 × 568 px                             │   │ px
+│ │                         Контентная область                         │   │ 800
+│ │                          1232 × 752 px                             │   │ px
 │ └────────────────────────────────────────────────────────────────────┘   │
 └──────────────────────────────────────────────────────────────────────────┘
 ```
 
-- Корень: `w-screen-w h-screen-h overflow-hidden bg-surface-0 text-fg-primary select-none p-4`.
-- Контентная область: **992×568 px**.
+- Корень (`App.tsx`): `w-[1280px] h-[800px] overflow-hidden bg-black text-white select-none`; отступ `p-6` — у каждого экрана (`MainScreen`, `SystemScreen`), чтобы при свайпе экран уезжал до края дисплея.
+- Контентная область: **1232×752 px**.
 
 ### 4.2. Сетка
 
-- **CSS Grid, 12 колонок × 6 строк**, `gap-3` (12 px).
-  - Ширина колонки: `(992 − 11·12) / 12 ≈ 71.7 px`.
-  - Высота строки: `(568 − 5·12) / 6 ≈ 84.7 px`.
+- **CSS Grid, 12 колонок × 6 строк**, `gap-6` (24 px) — виджеты «дышат» на 10.1" экране.
+  - Ширина колонки: `(1232 − 11·24) / 12 ≈ 80.7 px`.
+  - Высота строки: `(752 − 5·24) / 6 ≈ 105.3 px`.
+  - Ячейки: 7×3 ≈ **709×364**, 5×3 ≈ **499×364** px.
 - Виджеты размещаются явным указанием `col-span-*` / `row-span-*` (и при необходимости `col-start-*`). Никакого автопотока, который может «переполнить» экран.
 - Конфигурация раскладки — декларативный массив в `features/dashboard/layout.ts` (см. `Feature_Dashboard.md`).
 
@@ -187,7 +188,7 @@ interface DataSlice<T> {
 ```ts
 theme: {
   extend: {
-    spacing:  { 'screen-w': '1024px', 'screen-h': '600px' },
+    // размеры экрана — классы w-[1280px] h-[800px] в App.tsx
     colors: {
       surface: { 0: '#0B0D10', 1: '#14171C', 2: '#1C2027' },
       fg:      { primary: '#F2F4F7', secondary: '#A0A7B4', muted: '#5C6370' },

@@ -1,8 +1,8 @@
 import { Heart } from 'lucide-react'
-import { memo } from 'react'
+import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useClock } from '../clock/useClock'
 import { Cat } from './Cat'
-import { ANCHORS, STATE_LABELS } from './catStates'
+import { STATE_LABELS, roomLayout, type RoomLayout } from './catStates'
 import { Room } from './Room'
 import { useCatBrain } from './useCatBrain'
 
@@ -15,18 +15,42 @@ const CAT_BOX = { width: 96, height: 72, feetX: 48, feetY: 64 }
  * Слои: комната (статичный SVG) → кружка → кот (HTML-слой, движется transform-переходом) → подписи.
  */
 export const TamagotchiWidget = memo(function TamagotchiWidget() {
+  const containerRef = useRef<HTMLElement>(null)
+  const [size, setSize] = useState<{ width: number; height: number } | null>(null)
+
+  // Комната рисуется 1:1 в пикселях карточки — измеряем до первой отрисовки (без вспышки) и следим за изменением
+  useLayoutEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const measure = () => setSize({ width: Math.round(el.clientWidth), height: Math.round(el.clientHeight) })
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [])
+
+  return (
+    <section ref={containerRef} className="relative h-full overflow-hidden rounded-card bg-surface-1 p-0">
+      {/* key: новый размер — новый «мозг» с якорями под эту комнату */}
+      {size && <CatRoom key={`${size.width}x${size.height}`} width={size.width} height={size.height} />}
+    </section>
+  )
+})
+
+function CatRoom({ width, height }: { width: number; height: number }) {
   const hour = useClock('minute').getHours()
   const isNight = hour < 7 || hour >= 20
-  const { frame, mugOnShelf, pokedAt, poke } = useCatBrain(isNight)
+  const layout = useMemo(() => roomLayout(width, height), [width, height])
+  const { frame, mugOnShelf, pokedAt, poke } = useCatBrain(isNight, layout)
 
   const moving = frame.moveMs >= 1000 ? 'ease-in-out' : 'linear' // переходы между зонами — 2 с ease-in-out; «тыгыдык» — рывками
   const catTransform = `translate3d(${frame.x - CAT_BOX.feetX}px, ${frame.y - CAT_BOX.feetY}px, 0)`
 
   return (
-    <section className="relative h-full overflow-hidden rounded-card bg-surface-1 p-0" aria-label={`${CAT_NAME} ${STATE_LABELS[frame.state]}`}>
-      <Room isNight={isNight} />
+    <div className="absolute inset-0" role="img" aria-label={`${CAT_NAME} ${STATE_LABELS[frame.state]}`}>
+      <Room isNight={isNight} layout={layout} />
 
-      <Mug onShelf={mugOnShelf} />
+      <Mug onShelf={mugOnShelf} layout={layout} />
 
       <div
         className="absolute left-0 top-0 will-change-transform"
@@ -49,13 +73,13 @@ export const TamagotchiWidget = memo(function TamagotchiWidget() {
         <span className="font-semibold text-fg-primary">{CAT_NAME}</span>
         <span className="text-fg-secondary">{STATE_LABELS[frame.state]}</span>
       </div>
-    </section>
+    </div>
   )
-})
+}
 
 /** Кружка на полке; при KNOCKING_ITEM падает на пол (ускоряющийся переход, как под действием тяжести). */
-function Mug({ onShelf }: { onShelf: boolean }) {
-  const at = onShelf ? ANCHORS.mugOnShelf : ANCHORS.mugOnFloor
+function Mug({ onShelf, layout }: { onShelf: boolean; layout: RoomLayout }) {
+  const at = onShelf ? layout.anchors.mugOnShelf : layout.anchors.mugOnFloor
   return (
     <div
       className="absolute left-0 top-0"

@@ -55,6 +55,8 @@ services:
       OpenMeteo__LocationName: ${OpenMeteo__LocationName:-Москва}
       OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
       Traffic__Provider: ${Traffic__Provider:-Yandex}   # Yandex | Mock
+      Calendar__WebcalUrl: ${Calendar__WebcalUrl:-}
+      Calendar__TimeZone: ${TZ:-Europe/Moscow}
       Telemetry__ProcRoot: /host/proc
       Telemetry__SysRoot: /host/sys
     volumes:
@@ -121,6 +123,10 @@ OpenMeteo__Latitude=55.7558
 OpenMeteo__Longitude=37.6173
 OpenMeteo__LocationName=Москва
 OpenMeteo__IntervalMinutes=15
+
+# --- Календарь iCloud: «Поделиться календарём» → «Публичный календарь» → ссылка webcal://…
+# Ссылка открывает календарь без пароля — не коммитить! Пусто — календарь не подключён.
+Calendar__WebcalUrl=
 
 # --- Пробки: Yandex (веб-версия Яндекс Карт, ключ не нужен) | Mock (генератор для разработки) ---
 Traffic__Provider=Yandex

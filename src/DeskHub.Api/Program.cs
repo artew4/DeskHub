@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using DeskHub.Api.Hubs;
 using DeskHub.Api.Services;
+using DeskHub.Api.Services.Calendar;
 using DeskHub.Api.Services.Telemetry;
 using DeskHub.Api.Services.Traffic;
 using DeskHub.Api.Services.Weather;
@@ -81,6 +82,19 @@ if (builder.Configuration[$"{TrafficOptions.SectionName}:Provider"] == "Mock")
 else
     builder.Services.AddSingleton<ITrafficProvider, YandexHtmlTrafficProvider>();
 builder.Services.AddHostedService<TrafficWorker>();
+
+// --- Календарь: публичная ссылка iCloud (.ics) ---
+builder.Services.AddOptions<CalendarOptions>()
+    .BindConfiguration(CalendarOptions.SectionName)
+    .ValidateDataAnnotations()
+    .ValidateOnStart();
+builder.Services.AddHttpClient(CalendarOptions.HttpClientName, client =>
+    {
+        client.Timeout = TimeSpan.FromSeconds(30);
+        client.DefaultRequestHeaders.UserAgent.ParseAdd("DeskHub/1.0");
+    })
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.All });
+builder.Services.AddHostedService<AppleCalendarWorker>();
 
 var app = builder.Build();
 

@@ -6,12 +6,13 @@
 
 ## 1. Что такое DeskHub
 
-**DeskHub** — персональная настольная инфо-станция (Kiosk-терминал) на **Raspberry Pi 5 (8 GB, ARM64)** с **7" сенсорным экраном 1024×600 @ 60 Гц**. Устройство работает 24/7 и показывает на одном экране:
+**DeskHub** — персональная настольная инфо-станция (Kiosk-терминал) на **Raspberry Pi 5 (8 GB, ARM64)** с **10.1" сенсорным экраном 1280×800 @ 60 Гц** (до 08.10.2026 — 7" 1024×600). Устройство работает 24/7 и показывает на одном экране:
 
 - **Часы и дату** — крупно, читается с расстояния;
 - **Погоду** — текущую и почасовой прогноз (Open-Meteo);
 - **Пробки** — время в пути по маршрутам «Дом → Работа» и обратно;
-- **Телеметрию** самого Raspberry Pi — CPU, RAM, температуру SoC, аптайм.
+- **Телеметрию** самого Raspberry Pi — CPU, RAM, температуру SoC, аптайм;
+- **Календарь** — сетку месяца и повестку на сегодня/завтра из iCloud (Apple Calendar, .ics).
 
 Взаимодействие — только тач. UI просматривается «с одного взгляда» и не требует действий пользователя.
 
@@ -34,7 +35,7 @@
 │   └───────────────┬──────────────────────────────────┬──────────────────┘                                   │
 │                   │ /proc, /sys (read-only)          │ HTTPS (outbound)                                     │
 │                   ▼                                  ▼                                                      │
-│              Хост Linux                   Open-Meteo · Routing/Traffic API                                  │
+│              Хост Linux                   Open-Meteo · Яндекс Карты · iCloud                                  │
 └─────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -53,7 +54,8 @@
 |---|---|---|---|
 | `WeatherUpdated` | `WeatherWorker` | `weatherSlice.apply` | 10–15 мин |
 | `TrafficUpdated` | `TrafficWorker` | `trafficSlice.apply` | 2–5 мин |
-| `TelemetryTick` | `TelemetryWorker` | `telemetrySlice.push` | 1–2 с |
+| `TelemetryTick` | `TelemetryWorker` | `setTelemetry` | 1–2 с |
+| `CalendarUpdated` | `AppleCalendarWorker` | `setCalendar` | 15 мин |
 | `SettingsChanged` | API настроек | `ui.applySettings` | по событию |
 
 Любое изменение контракта (DTO, имя события, эндпоинт) **обязательно** отражается в документации обоих слоёв: `Frontend_react/Feature_Widgets.md` и `Backend_dotnet/Core_Architecture.md`.
@@ -68,7 +70,7 @@ knowledge/
 │
 ├── Frontend_react/                        ← клиент: React + Vite + TS + Tailwind + Canvas
 │   ├── 00_Frontend_Architecture.md        суть проекта, железо, флаги Kiosk, модули, глоссарий
-│   ├── 01_Frontend_TechStack.md           жёсткие правила: 1024×600, no-scroll, 60 FPS, SignalR-only
+│   ├── 01_Frontend_TechStack.md           жёсткие правила: 1280×800, no-scroll, 60 FPS, SignalR-only
 │   ├── Core.md                            структура SPA, Zustand, UI-кит, тач, SignalR-клиент
 │   ├── Feature_Dashboard.md               главный экран, часы, сетка 12×6, анимации, ночной режим
 │   └── Feature_Widgets.md                 виджеты Погода / Пробки / Телеметрия, DTO, Canvas-графики

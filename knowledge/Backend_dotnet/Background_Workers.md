@@ -12,6 +12,7 @@
 | `WeatherWorker` | Open-Meteo (HTTPS) | 15 мин | `weather_logs` | `WeatherUpdated` |
 | `TrafficWorker` | API карт (HTTPS) | 5 мин, в часы пик 2 мин | `traffic_logs` | `TrafficUpdated` |
 | `TelemetryWorker` | `/proc`, `/sys` хоста | 1 с | — (только память) | `TelemetryTick` |
+| `AppleCalendarWorker` | iCloud, публичная ссылка .ics | 15 мин (ошибка — повтор через 2 мин) | — (только память) | `CalendarUpdated` |
 | `RetentionWorker` | PostgreSQL | раз в сутки (≈ 03:30) | удаление старых логов | — |
 
 Общий поток каждого воркера:
@@ -316,3 +317,50 @@ public sealed class LinuxTelemetryReader(IOptions<TelemetryOptions> opt) : ITele
 | Цикл воркера | `FakeTimeProvider` (`Microsoft.Extensions.TimeProvider.Testing`): продвижение времени → проверка вызова провайдера и `DashboardNotifier` (мок `IHubContext`) |
 | Отказоустойчивость | Провайдер бросает исключение → воркер продолжает работу, следующая итерация выполняется, хост не падает |
 | Часы пик | `GetInterval()` возвращает 2/5/15 мин для разного локального времени |
+
+---
+
+## 8. AppleCalendarWorker (iCloud Calendar, .ics)
+
+`Workers/AppleCalendarWorker.cs` + `Services/Calendar/` (`CalendarOptions`, `IcsCalendarParser`); пакет **Ical.Net 5.2.3**.
+
+### 8.1. Конфигурация
+
+| Ключ (`.env` / `appsettings.json`) | По умолчанию | Смысл |
+|---|---|---|
+| `Calendar__WebcalUrl` | пусто | Публичная ссылка iCloud: Календарь → «Поделиться» → «Публичный календарь» (`webcal://p…-caldav.icloud.com/published/2/…`). **Даёт доступ к событиям без пароля** — только в `.env`, в логи пишется лишь хост. Пусто — воркер не стартует (`Warning`), фронтенд показывает «Календарь не подключён». |
+| `Calendar__IntervalMinutes` | 15 | Интервал загрузки |
+| `Calendar__DaysAhead` | 7 | Дней вперёд от сегодня |
+| `Calendar__TimeZone` | `Europe/Moscow` (в compose — из `TZ`) | Пояс устройства (IANA) для «плавающих» событий и событий «весь день». В образе `aspnet:10.0` есть `/usr/share/zoneinfo`. |
+
+### 8.2. Алгоритм
+
+```
+каждые 15 мин:
+  1. webcal:// → https:// (та же ссылка по HTTPS), GET (named HttpClient "AppleCalendar", таймаут 30 с, gzip/br, редиректы iCloud)
+  2. Ical.Net: Calendar.Load(stream)
+  3. Диапазон [сегодня 00:00; max(сегодня + DaysAhead + 1 день, 1-е число следующего месяца))
+     — повестке нужны сегодня/завтра, точкам в сетке месяца — дни до конца месяца
+  4. calendar.GetOccurrences(сегодня − 31 день).TakeWhileBefore(конец диапазона)
+     — повторяющиеся события (RRULE/RDATE/EXDATE) разворачивает Ical.Net; запас назад — чтобы поймать
+       многодневные события, начавшиеся раньше диапазона
+  5. Оставить вхождения, пересекающие диапазон (end > start диапазона && start < end диапазона), максимум 300
+  6. Время → пояс устройства (см. 8.3); сортировка: по началу, «весь день» раньше, по названию
+  7. CalendarModel { events, rangeStart, rangeEnd, updatedAt } → DashboardNotifier.SendCalendarUpdate
+ошибка (сеть, HTTP, битый .ics) → Warning, повтор через 2 мин; на экране остаются прежние события
+```
+
+### 8.3. Время (проверено на тестовом .ics)
+
+| Вид события в .ics | Как читается | Пример |
+|---|---|---|
+| `DTSTART;TZID=Europe/Moscow:…` | `AsUtc` → пояс устройства | стендап 10:15 MSK → `10:15+03:00` |
+| `DTSTART:…Z` (UTC) | `AsUtc` → пояс устройства | 15:00Z → `18:00+03:00` |
+| `DTSTART:20261009T193000` («плавающее», без пояса) | **как время устройства** — `AsUtc` Ical.Net считает его UTC, что сдвинуло бы событие на +3 ч | `19:30+03:00`, не 22:30 |
+| `DTSTART;VALUE=DATE:20261008` («весь день») | полночь даты в поясе устройства, `isAllDay = true`, конец не включительно | 08.10 00:00 → 09.10 00:00 |
+| `RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR` + `EXDATE` | развёрнуто по дням, исключённая дата пропущена | стендап 09.10 отсутствует |
+| Многодневное `VALUE=DATE` 06.10–11.10 | попадает, хотя началось до диапазона | «Командировка» видна 08.10 и 09.10 |
+
+### 8.4. Контракт
+
+`CalendarEventModel { title, startTime, endTime, isAllDay, location }` (ISO со смещением пояса устройства), `CalendarModel { events, rangeStart, rangeEnd, updatedAt }`; событие хаба `CalendarUpdated`; в snapshot — поле `calendar` (`null`, если не подключён или ещё не загружен).

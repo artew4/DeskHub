@@ -19,17 +19,17 @@ export const DigitalDate = memo(function DigitalDate() {
     <div className="flex min-w-0 flex-col">
       <time
         dateTime={now.toISOString()}
-        className="text-[88px] font-extralight leading-none tracking-tight tabular-nums text-fg-primary"
+        className="text-[116px] font-extralight leading-none tracking-tight tabular-nums text-fg-primary"
       >
         {timeFormat.format(now)}
       </time>
 
-      <div className="mt-5 h-px w-10 bg-surface-2" />
+      <div className="mt-6 h-px w-12 bg-surface-2" />
 
-      <span className="mt-4 text-label font-medium uppercase tracking-[0.3em] text-fg-secondary">
+      <span className="mt-5 text-base font-medium uppercase tracking-[0.3em] text-fg-secondary">
         {weekdayFormat.format(now)}
       </span>
-      <span className="mt-1.5 text-xl font-light tracking-wide text-fg-secondary">
+      <span className="mt-2 text-2xl font-light tracking-wide text-fg-secondary">
         {capitalize(dayMonthFormat.format(now))}
       </span>
     </div>

@@ -28,19 +28,61 @@ export interface CatStep {
   effect?: 'knockMug' | 'restoreMug'
 }
 
-export const ROOM = { width: 574, height: 278 }
+/** Базовый макет комнаты, под который нарисованы объекты; реальная комната растягивается вокруг него. */
+export const BASE_ROOM = { width: 574, height: 278, floorTop: 214 }
 
-/** Якоря комнаты (точка опоры лап). Совпадают с рисунком в Room.tsx. */
-export const ANCHORS = {
-  rug: { x: 300, y: 252 },
-  windowSill: { x: 136, y: 142 },
-  shelf: { x: 448, y: 118 },
-  shelfNearMug: { x: 470, y: 118 },
-  mugOnShelf: { x: 498, y: 118 },
-  mugOnFloor: { x: 484, y: 264 },
-} as const
+/**
+ * Геометрия комнаты под фактический размер карточки (1:1 в пикселях — кот всегда одного размера).
+ * Пол прижат к низу, окно — к левому краю, лампа и коврик — по центру, полка и растение — к правому краю.
+ * Чем шире и выше карточка, тем больше пола для прогулок.
+ */
+export interface RoomLayout {
+  width: number
+  height: number
+  floorTop: number
+  /** Сдвиг центральной группы (лампа, картина, коврик) относительно базового макета */
+  centerShift: number
+  /** Сдвиг правой группы (полка, растение) */
+  rightShift: number
+  /** Сдвиг всего «интерьера» по вертикали (пол опустился вместе с низом карточки) */
+  verticalShift: number
+  anchors: {
+    rug: Point
+    windowSill: Point
+    shelf: Point
+    shelfNearMug: Point
+    mugOnShelf: Point
+    mugOnFloor: Point
+  }
+  floor: { minX: number; maxX: number; minY: number; maxY: number }
+}
 
-const FLOOR = { minX: 70, maxX: 520, minY: 250, maxY: 262 }
+export function roomLayout(width: number, height: number): RoomLayout {
+  const w = Math.max(width, BASE_ROOM.width)
+  const h = Math.max(height, BASE_ROOM.height)
+  const floorTop = h - (BASE_ROOM.height - BASE_ROOM.floorTop)
+  const verticalShift = floorTop - BASE_ROOM.floorTop
+  const centerShift = Math.round(w / 2 - BASE_ROOM.width / 2)
+  const rightShift = w - BASE_ROOM.width
+  const shelfY = 118 + verticalShift
+  return {
+    width: w,
+    height: h,
+    floorTop,
+    centerShift,
+    rightShift,
+    verticalShift,
+    anchors: {
+      rug: { x: 300 + centerShift, y: floorTop + 38 },
+      windowSill: { x: 136, y: 142 + verticalShift },
+      shelf: { x: 448 + rightShift, y: shelfY },
+      shelfNearMug: { x: 470 + rightShift, y: shelfY },
+      mugOnShelf: { x: 498 + rightShift, y: shelfY },
+      mugOnFloor: { x: 484 + rightShift, y: h - 14 },
+    },
+    floor: { minX: 70, maxX: w - 54, minY: floorTop + 36, maxY: floorTop + 48 },
+  }
+}
 
 export const STATE_LABELS: Record<CatState, string> = {
   SLEEPING_RUG: 'спит на коврике',
@@ -108,16 +150,17 @@ const RUN_MS = 420
 const faceTowards = (from: Point, to: Point, fallback: Facing): Facing =>
   Math.abs(to.x - from.x) < 4 ? fallback : to.x > from.x ? 1 : -1
 
-const randomFloorPoint = (random: () => number): Point => ({
-  x: Math.round(randomBetween(FLOOR.minX, FLOOR.maxX, random)),
-  y: Math.round(randomBetween(FLOOR.minY, FLOOR.maxY, random)),
+const randomFloorPoint = (floor: RoomLayout['floor'], random: () => number): Point => ({
+  x: Math.round(randomBetween(floor.minX, floor.maxX, random)),
+  y: Math.round(randomBetween(floor.minY, floor.maxY, random)),
 })
 
 /**
  * Разворачивает состояние в шаги: при необходимости сначала дойти до якоря (поза walk, 2 с),
  * затем само занятие. Общая продолжительность состояния — 10–40 с.
  */
-export function planState(state: CatState, from: CatFrame, random: () => number = Math.random): CatStep[] {
+export function planState(state: CatState, from: CatFrame, layout: RoomLayout, random: () => number = Math.random): CatStep[] {
+  const { anchors, floor } = layout
   const steps: CatStep[] = []
   let at: CatFrame = from
 
@@ -133,38 +176,39 @@ export function planState(state: CatState, from: CatFrame, random: () => number 
 
   switch (state) {
     case 'SLEEPING_RUG':
-      walkTo(ANCHORS.rug)
+      walkTo(anchors.rug)
       stay('sleep', seconds(23, 38, random), at.facing, 'restoreMug') // пока кот спит, хозяин поднял кружку
       break
     case 'WINDOW_WATCHING':
-      walkTo(ANCHORS.windowSill)
+      walkTo(anchors.windowSill)
       stay('sit', seconds(12, 30, random), random() < 0.5 ? 1 : -1)
       break
     case 'SHELF_SITTING':
-      walkTo(ANCHORS.shelf)
+      walkTo(anchors.shelf)
       stay('sit', seconds(10, 25, random), -1) // смотрит в комнату
       break
     case 'WALKING': {
       const hops = 3 + Math.floor(random() * 2)
       for (let i = 0; i < hops; i++) {
-        walkTo(randomFloorPoint(random))
+        walkTo(randomFloorPoint(floor, random))
         stay('sit', seconds(2, 5, random))
       }
       break
     }
     case 'ZOOMIES': {
-      // Короткие быстрые рывки от стены к стене, потом отдышаться
+      // Короткие быстрые рывки от стены к стене (крайние трети пола), потом отдышаться
       const dashes = 12 + Math.floor(random() * 5)
+      const third = (floor.maxX - floor.minX) / 3
       for (let i = 0; i < dashes; i++) {
-        const left = at.x > (FLOOR.minX + FLOOR.maxX) / 2
-        const x = left ? randomBetween(FLOOR.minX, 220, random) : randomBetween(360, FLOOR.maxX, random)
-        walkTo({ x: Math.round(x), y: Math.round(randomBetween(FLOOR.minY, FLOOR.maxY, random)) }, 'run', RUN_MS)
+        const left = at.x > (floor.minX + floor.maxX) / 2
+        const x = left ? randomBetween(floor.minX, floor.minX + third, random) : randomBetween(floor.maxX - third, floor.maxX, random)
+        walkTo({ x: Math.round(x), y: Math.round(randomBetween(floor.minY, floor.maxY, random)) }, 'run', RUN_MS)
       }
       stay('sit', seconds(4, 6, random))
       break
     }
     case 'KNOCKING_ITEM':
-      walkTo(ANCHORS.shelfNearMug)
+      walkTo(anchors.shelfNearMug)
       stay('sit', 1500, 1) // прицеливается
       stay('swipe', 700, 1) // замах лапой
       stay('sit', seconds(8, 12, random), 1, 'knockMug') // кружка летит; кот невинно смотрит вниз
@@ -177,4 +221,4 @@ export function planState(state: CatState, from: CatFrame, random: () => number 
   return steps
 }
 
-export const INITIAL_FRAME: CatFrame = { state: 'SLEEPING_RUG', pose: 'sleep', ...ANCHORS.rug, facing: 1, moveMs: 0 }
+export const initialFrame = (layout: RoomLayout): CatFrame => ({ state: 'SLEEPING_RUG', pose: 'sleep', ...layout.anchors.rug, facing: 1, moveMs: 0 })

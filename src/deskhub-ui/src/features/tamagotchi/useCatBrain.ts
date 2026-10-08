@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { INITIAL_FRAME, pickNextState, planState, type CatFrame, type CatState, type CatStep } from './catStates'
+import { initialFrame, pickNextState, planState, type CatFrame, type CatState, type CatStep, type RoomLayout } from './catStates'
 
 export interface CatBrain {
   frame: CatFrame
@@ -14,8 +14,8 @@ export interface CatBrain {
  * выбирает следующее состояние (pickNextState) и планирует его (planState).
  * React-состояние меняется только на границах шагов (раз в 0.4–40 с), не каждый кадр.
  */
-export function useCatBrain(isNight: boolean): CatBrain {
-  const [frame, setFrame] = useState<CatFrame>(INITIAL_FRAME)
+export function useCatBrain(isNight: boolean, layout: RoomLayout): CatBrain {
+  const [frame, setFrame] = useState<CatFrame>(() => initialFrame(layout))
   const [mugOnShelf, setMugOnShelf] = useState(true)
   const [pokedAt, setPokedAt] = useState<number | null>(null)
 
@@ -23,6 +23,7 @@ export function useCatBrain(isNight: boolean): CatBrain {
   const frameRef = useRef(frame)
   const mugRef = useRef(true)
   const nightRef = useRef(isNight)
+  const layoutRef = useRef(layout)
   const history = useRef<CatState[]>(['SLEEPING_RUG'])
   const queue = useRef<CatStep[]>([])
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
@@ -30,7 +31,8 @@ export function useCatBrain(isNight: boolean): CatBrain {
 
   useEffect(() => {
     nightRef.current = isNight
-  }, [isNight])
+    layoutRef.current = layout
+  }, [isNight, layout])
 
   /** Запуск следующего шага; присваивается в эффекте ниже (нужен poke для пробуждения). */
   const runNextStep = useRef<() => void>(() => {})
@@ -46,7 +48,7 @@ export function useCatBrain(isNight: boolean): CatBrain {
         })
         justWoken.current = false
         history.current = [...history.current.slice(-5), next]
-        queue.current = planState(next, frameRef.current)
+        queue.current = planState(next, frameRef.current, layoutRef.current)
       }
 
       const step = queue.current.shift()!

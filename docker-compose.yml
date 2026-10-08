@@ -23,6 +23,8 @@ services:
       OpenMeteo__LocationName: ${OpenMeteo__LocationName:-Москва}
       OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
       Traffic__Provider: ${Traffic__Provider:-Yandex}   # Yandex | Mock
+      Calendar__WebcalUrl: ${Calendar__WebcalUrl:-}
+      Calendar__TimeZone: ${TZ:-Europe/Moscow}
       Telemetry__ProcRoot: /host/proc
       Telemetry__SysRoot: /host/sys
     volumes:

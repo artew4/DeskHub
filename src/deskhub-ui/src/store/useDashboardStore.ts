@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { DashboardSnapshot, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
+import type { CalendarModel, DashboardSnapshot, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 
@@ -13,6 +13,7 @@ interface DashboardState {
   weather: WeatherModel | null
   traffic: TrafficModel | null
   telemetry: TelemetryModel | null
+  calendar: CalendarModel | null
   serverTime: string | null
 
   connectionStatus: ConnectionStatus
@@ -23,6 +24,7 @@ interface DashboardState {
   setWeather: (weather: WeatherModel) => void
   setTraffic: (traffic: TrafficModel) => void
   setTelemetry: (telemetry: TelemetryModel) => void
+  setCalendar: (calendar: CalendarModel) => void
   applySnapshot: (snapshot: DashboardSnapshot) => void
   setConnectionStatus: (status: ConnectionStatus) => void
 
@@ -61,6 +63,9 @@ const acceptWeather = (incoming: WeatherModel | null, current: WeatherModel | nu
 const acceptTelemetry = (incoming: TelemetryModel | null, current: TelemetryModel | null) =>
   incoming != null && isNotOlder(incoming.timestamp, current?.timestamp)
 
+const acceptCalendar = (incoming: CalendarModel | null, current: CalendarModel | null) =>
+  incoming != null && isNotOlder(incoming.updatedAt, current?.updatedAt)
+
 const acceptTraffic = (incoming: TrafficModel | null, current: TrafficModel | null) =>
   incoming != null && isNotOlder(incoming.updatedAt, current?.updatedAt)
 
@@ -69,6 +74,7 @@ export const useDashboardStore = create<DashboardState>()((set, get) => ({
   weather: null,
   traffic: null,
   telemetry: null,
+  calendar: null,
   serverTime: null,
 
   connectionStatus: 'connecting',
@@ -77,13 +83,15 @@ export const useDashboardStore = create<DashboardState>()((set, get) => ({
   setWeather: (weather) => set((s) => (acceptWeather(weather, s.weather) ? { weather } : s)),
   setTraffic: (traffic) => set((s) => (acceptTraffic(traffic, s.traffic) ? { traffic } : s)),
   setTelemetry: (telemetry) => set((s) => (acceptTelemetry(telemetry, s.telemetry) ? { telemetry } : s)),
+  setCalendar: (calendar) => set((s) => (acceptCalendar(calendar, s.calendar) ? { calendar } : s)),
 
   // Каждая часть snapshot проходит ту же проверку свежести, что и push-события
-  applySnapshot: ({ weather, traffic, telemetry, serverTime }) =>
+  applySnapshot: ({ weather, traffic, telemetry, calendar, serverTime }) =>
     set((s) => ({
       weather: acceptWeather(weather, s.weather) ? weather : s.weather,
       traffic: acceptTraffic(traffic, s.traffic) ? traffic : s.traffic,
       telemetry: acceptTelemetry(telemetry, s.telemetry) ? telemetry : s.telemetry,
+      calendar: acceptCalendar(calendar, s.calendar) ? calendar : s.calendar,
       serverTime,
     })),
 

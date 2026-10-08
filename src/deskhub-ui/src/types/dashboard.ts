@@ -54,9 +54,28 @@ export interface TelemetryModel {
   timestamp: string
 }
 
+export interface CalendarEventModel {
+  title: string
+  /** ISO со смещением пояса устройства; для «весь день» — полночь даты начала */
+  startTime: string
+  /** Не включительно; для «весь день» — полночь дня после последнего */
+  endTime: string
+  isAllDay: boolean
+  location: string | null
+}
+
+export interface CalendarModel {
+  events: CalendarEventModel[]
+  /** Диапазон, за который загружены события: [rangeStart; rangeEnd) */
+  rangeStart: string
+  rangeEnd: string
+  updatedAt: string
+}
+
 export interface DashboardSnapshot {
   weather: WeatherModel | null
   traffic: TrafficModel | null
   telemetry: TelemetryModel | null
+  calendar: CalendarModel | null
   serverTime: string
 }

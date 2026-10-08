@@ -1,5 +1,5 @@
 import { memo } from 'react'
-import { ROOM } from './catStates'
+import type { RoomLayout } from './catStates'
 
 // Палитра комнаты — приглушённые тона в гамме дашборда (фон карточки — surface-1 #14171C)
 const C = {
@@ -27,54 +27,116 @@ const SKY = { day: '#2B4F73', night: '#0D1B2E' }
 const SKYLINE = { day: '#22405F', night: '#0A1220' }
 
 /**
- * Комната кота — статичный плоский SVG 574×278 (1:1 с ячейкой 7×3).
- * Якоря (ANCHORS в catStates.ts): подоконник (136, 142), полка (396…536, y 118), лежанка на коврике (300, 252).
- * Меняется только при смене дня и ночи.
+ * Комната кота — плоский SVG в реальном размере карточки (1:1, без масштабирования: кот и якоря в тех же пикселях).
+ * Объекты нарисованы в базовом макете 574×278 и разнесены группами по layout (roomLayout в catStates.ts):
+ * окно — у левого края, лампа/картина/коврик — по центру, полка/растение — у правого края, всё — от уровня пола.
+ * Меняется только при смене дня и ночи или размера карточки.
  */
-export const Room = memo(function Room({ isNight }: { isNight: boolean }) {
+export const Room = memo(function Room({ isNight, layout }: { isNight: boolean; layout: RoomLayout }) {
   const sky = isNight ? SKY.night : SKY.day
+  const { width: w, height: h, floorTop, centerShift, rightShift, verticalShift } = layout
+  const lampX = 300 + centerShift
   return (
-    <svg viewBox={`0 0 ${ROOM.width} ${ROOM.height}`} preserveAspectRatio="xMidYMid slice" className="absolute inset-0 size-full" aria-hidden>
-      {/* Стена и пол */}
-      <rect width={ROOM.width} height={ROOM.height} fill={C.wall} />
-      <rect y={150} width={ROOM.width} height={64} fill={C.wallLow} />
-      <rect y={214} width={ROOM.width} height={64} fill={C.floor} />
-      <rect y={209} width={ROOM.width} height={6} fill={C.baseboard} />
-      <line x1={0} y1={236} x2={ROOM.width} y2={236} stroke={C.floorLine} strokeWidth={2} />
-      <line x1={0} y1={260} x2={ROOM.width} y2={260} stroke={C.floorLine} strokeWidth={2} />
+    <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="absolute inset-0" aria-hidden>
+      {/* Стена, карниз и пол — во всю ширину */}
+      <rect width={w} height={h} fill={C.wall} />
+      <rect width={w} height={8} fill={C.wallLow} />
+      <rect y={floorTop - 64} width={w} height={64} fill={C.wallLow} />
+      <rect y={floorTop} width={w} height={h - floorTop} fill={C.floor} />
+      <rect y={floorTop - 5} width={w} height={6} fill={C.baseboard} />
+      <line x1={0} y1={floorTop + 22} x2={w} y2={floorTop + 22} stroke={C.floorLine} strokeWidth={2} />
+      <line x1={0} y1={floorTop + 46} x2={w} y2={floorTop + 46} stroke={C.floorLine} strokeWidth={2} />
 
-      {/* Свет: днём — пятно от окна на полу, ночью — конус от лампы */}
-      {isNight ? (
-        <polygon points="282,36 318,36 384,214 216,214" fill={C.warm} opacity={0.05} />
-      ) : (
-        <polygon points="66,214 204,214 250,262 40,262" fill="#FFFFFF" opacity={0.035} />
-      )}
+      <StringLights width={w} sag={Math.min(26, 10 + verticalShift / 4)} isNight={isNight} />
 
-      <Window sky={sky} isNight={isNight} />
+      {/* Шнур лампы — от потолка, какой бы высоты ни была комната */}
+      <line x1={lampX} y1={0} x2={lampX} y2={22 + verticalShift} stroke={C.frame} strokeWidth={2} />
 
+      {/* Левая группа: окно и пятно света от него */}
+      <g transform={`translate(0 ${verticalShift})`}>
+        {!isNight && <polygon points="66,214 204,214 250,262 40,262" fill="#FFFFFF" opacity={0.035} />}
+        <Window sky={sky} isNight={isNight} />
+      </g>
+
+      {/* Центральная группа: лампа, конус света, картина, коврик с лежанкой */}
+      <g transform={`translate(${centerShift} ${verticalShift})`}>
+        {isNight && <polygon points="282,36 318,36 384,214 216,214" fill={C.warm} opacity={0.05} />}
+        <CenterGroup isNight={isNight} />
+      </g>
+
+      {/* Правая группа: полка и напольное растение */}
+      <g transform={`translate(${rightShift} ${verticalShift})`}>
+        <Shelf />
+        <FloorPlant />
+      </g>
+    </svg>
+  )
+})
+
+const BULB_COLORS = ['#F5C451', '#7FD1B9', '#F2A7A0', '#9DB8F2']
+
+/**
+ * Гирлянда под потолком — заполняет верх высокой комнаты. Провод провисает дугами между креплениями;
+ * ночью лампочки светятся и мерцают (opacity), днём — приглушены.
+ */
+function StringLights({ width, sag, isNight }: { width: number; sag: number; isNight: boolean }) {
+  const spans = Math.max(3, Math.round(width / 180))
+  const spanWidth = width / spans
+  const top = 12
+  const bulbs: { x: number; y: number; color: string }[] = []
+  let wire = `M0,${top}`
+  for (let i = 0; i < spans; i++) {
+    const x0 = i * spanWidth
+    wire += ` Q${x0 + spanWidth / 2},${top + sag * 2} ${x0 + spanWidth},${top}`
+    // Лампочки — по квадратичной кривой провода
+    for (const t of [0.2, 0.4, 0.6, 0.8]) {
+      const y = (1 - t) * (1 - t) * top + 2 * (1 - t) * t * (top + sag * 2) + t * t * top
+      bulbs.push({ x: x0 + t * spanWidth, y, color: BULB_COLORS[bulbs.length % BULB_COLORS.length] })
+    }
+  }
+  return (
+    <g>
+      <path d={wire} fill="none" stroke={C.frame} strokeWidth={1.5} />
+      {bulbs.map((b, i) => (
+        <g key={i}>
+          {isNight && <circle cx={b.x} cy={b.y + 5} r={7} fill={b.color} opacity={0.12} />}
+          <ellipse
+            cx={b.x}
+            cy={b.y + 5}
+            rx={2.6}
+            ry={3.6}
+            fill={b.color}
+            opacity={isNight ? 0.95 : 0.35}
+            className={isNight ? 'motion-safe:animate-twinkle' : ''}
+            style={isNight ? { animationDelay: `${(i % 5) * 0.6}s`, animationDuration: '4s' } : undefined}
+          />
+        </g>
+      ))}
+    </g>
+  )
+}
+
+function CenterGroup({ isNight }: { isNight: boolean }) {
+  return (
+    <g>
       {/* Картина */}
       <rect x={330} y={40} width={52} height={38} rx={2} fill={C.frame} />
       <rect x={334} y={44} width={44} height={30} fill="#1E2A36" />
       <polygon points="334,74 350,56 362,66 368,60 378,74" fill={C.leafDark} />
       <circle cx={368} cy={52} r={3} fill={isNight ? C.moon : C.warm} opacity={0.8} />
 
-      {/* Подвесная лампа */}
-      <line x1={300} y1={0} x2={300} y2={22} stroke={C.frame} strokeWidth={2} />
+      {/* Подвесная лампа (шнур — в Room) */}
       <path d="M286,22 L314,22 L322,36 L278,36 Z" fill={C.frame} />
       <ellipse cx={300} cy={37} rx={6} ry={2.5} fill={isNight ? C.warm : '#3A414D'} />
-
-      <Shelf />
 
       {/* Коврик и лежанка */}
       <ellipse cx={300} cy={256} rx={96} ry={17} fill={C.rug} />
       <ellipse cx={300} cy={256} rx={80} ry={12} fill="none" stroke={C.rugLine} strokeWidth={2} strokeDasharray="6 5" />
       <ellipse cx={300} cy={251} rx={48} ry={13} fill={C.bed} />
       <ellipse cx={300} cy={250} rx={37} ry={8} fill={C.bedInner} />
-
-      <FloorPlant />
-    </svg>
+    </g>
   )
-})
+}
 
 function Window({ sky, isNight }: { sky: string; isNight: boolean }) {
   return (

@@ -12,10 +12,12 @@ public sealed class DashboardState(TimeProvider time)
     private volatile WeatherModel? _weather;
     private volatile TrafficModel? _traffic;
     private volatile TelemetryModel? _telemetry;
+    private volatile CalendarModel? _calendar;
 
     public void SetWeather(WeatherModel weather) => _weather = weather;
     public void SetTraffic(TrafficModel traffic) => _traffic = traffic;
     public void SetTelemetry(TelemetryModel telemetry) => _telemetry = telemetry;
+    public void SetCalendar(CalendarModel calendar) => _calendar = calendar;
 
-    public DashboardSnapshot GetSnapshot() => new(_weather, _traffic, _telemetry, time.GetUtcNow());
+    public DashboardSnapshot GetSnapshot() => new(_weather, _traffic, _telemetry, _calendar, time.GetUtcNow());
 }
