@@ -23,7 +23,7 @@ interface Gesture {
 }
 
 /**
- * Горизонтальная карусель экранов 1280×800.
+ * Горизонтальная карусель экранов 1024×600.
  *
  * - Трек — flex-ряд экранов шириной 100 % каждый; активный экран выбирается translateX(-index × 100 %).
  * - Во время свайпа трек следует за пальцем: transform пишется напрямую в DOM через ref,
@@ -122,10 +122,10 @@ export function ScreenCarousel({ children }: { children: ReactNode }) {
   )
 }
 
-/** Индикатор экранов — в нижнем отступе (24 px), не перекрывает виджеты. */
+/** Индикатор экранов — в нижнем отступе (16 px), не перекрывает виджеты. */
 function PageDots({ count, active }: { count: number; active: number }) {
   return (
-    <div className="pointer-events-none absolute bottom-[9px] left-1/2 flex -translate-x-1/2 gap-1.5" aria-hidden>
+    <div className="pointer-events-none absolute bottom-[5px] left-1/2 flex -translate-x-1/2 gap-1.5" aria-hidden>
       {Array.from({ length: count }, (_, i) => (
         <span
           key={i}

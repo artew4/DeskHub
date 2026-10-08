@@ -83,18 +83,21 @@ else
     builder.Services.AddSingleton<ITrafficProvider, YandexHtmlTrafficProvider>();
 builder.Services.AddHostedService<TrafficWorker>();
 
-// --- Календарь: публичная ссылка iCloud (.ics) ---
+// --- Календари: несколько iCal-фидов (iCloud, Outlook, …), у каждого свой цвет ---
 builder.Services.AddOptions<CalendarOptions>()
     .BindConfiguration(CalendarOptions.SectionName)
     .ValidateDataAnnotations()
+    .Validate(o => o.HasValidColors(), "Calendar:Sources:*:Color must be #RRGGBB")
     .ValidateOnStart();
 builder.Services.AddHttpClient(CalendarOptions.HttpClientName, client =>
     {
         client.Timeout = TimeSpan.FromSeconds(30);
         client.DefaultRequestHeaders.UserAgent.ParseAdd("DeskHub/1.0");
     })
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.All });
-builder.Services.AddHostedService<AppleCalendarWorker>();
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AutomaticDecompression = System.Net.DecompressionMethods.All })
+    // Встроенное логирование HttpClient пишет полный URL запроса, а в ссылке календаря — секретный токен
+    .RemoveAllLoggers();
+builder.Services.AddHostedService<CalendarWorker>();
 
 var app = builder.Build();
 

@@ -9,9 +9,9 @@ function App() {
     startDashboardConnection()
   }, [])
 
-  // Отступ p-6 — внутри каждого экрана, чтобы при свайпе экраны уезжали целиком до края дисплея
+  // Отступ p-4 — внутри каждого экрана, чтобы при свайпе экраны уезжали целиком до края дисплея
   return (
-    <div className="w-[1280px] h-[800px] overflow-hidden bg-black text-white font-sans select-none">
+    <div className="w-[1024px] h-[600px] overflow-hidden bg-black text-white font-sans select-none">
       <ScreenCarousel>
         <MainScreen />
         <SystemScreen />

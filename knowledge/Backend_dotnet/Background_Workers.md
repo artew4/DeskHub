@@ -12,7 +12,7 @@
 | `WeatherWorker` | Open-Meteo (HTTPS) | 15 мин | `weather_logs` | `WeatherUpdated` |
 | `TrafficWorker` | API карт (HTTPS) | 5 мин, в часы пик 2 мин | `traffic_logs` | `TrafficUpdated` |
 | `TelemetryWorker` | `/proc`, `/sys` хоста | 1 с | — (только память) | `TelemetryTick` |
-| `AppleCalendarWorker` | iCloud, публичная ссылка .ics | 15 мин (ошибка — повтор через 2 мин) | — (только память) | `CalendarUpdated` |
+| `CalendarWorker` | Несколько .ics (iCloud, Outlook) параллельно | 15 мин (сбой — повтор через 2 мин) | — (только память) | `CalendarUpdated` |
 | `RetentionWorker` | PostgreSQL | раз в сутки (≈ 03:30) | удаление старых логов | — |
 
 Общий поток каждого воркера:
@@ -320,41 +320,61 @@ public sealed class LinuxTelemetryReader(IOptions<TelemetryOptions> opt) : ITele
 
 ---
 
-## 8. AppleCalendarWorker (iCloud Calendar, .ics)
+## 8. CalendarWorker (несколько календарей: iCloud, Outlook, .ics)
 
-`Workers/AppleCalendarWorker.cs` + `Services/Calendar/` (`CalendarOptions`, `IcsCalendarParser`); пакет **Ical.Net 5.2.3**.
+`Workers/CalendarWorker.cs` (бывший `AppleCalendarWorker`) + `Services/Calendar/` (`CalendarOptions`, `IcsCalendarParser`, `CalendarRange`); пакет **Ical.Net 5.2.3**.
 
 ### 8.1. Конфигурация
 
-| Ключ (`.env` / `appsettings.json`) | По умолчанию | Смысл |
+Календари — массив `Calendar:Sources`, у каждого `Url` (webcal:// или https://) и `Color` (#RRGGBB, палитра iOS; проверяется при старте):
+
+| Источник | Цвет |
+|---|---|
+| iCloud — личный | `#34C759` (зелёный) |
+| iCloud — второй | `#007AFF` (синий) |
+| iCloud — третий | `#AF52DE` (лиловый) |
+| Outlook (Office 365, «Опубликовать календарь» → .ics) | `#FF9500` (оранжевый) |
+
+| Ключ | По умолчанию | Смысл |
 |---|---|---|
-| `Calendar__WebcalUrl` | пусто | Публичная ссылка iCloud: Календарь → «Поделиться» → «Публичный календарь» (`webcal://p…-caldav.icloud.com/published/2/…`). **Даёт доступ к событиям без пароля** — только в `.env`, в логи пишется лишь хост. Пусто — воркер не стартует (`Warning`), фронтенд показывает «Календарь не подключён». |
+| `Calendar__Sources__N__Url` / `__Color` | пусто | Массив календарей (в JSON — `Calendar:Sources:[{ Url, Color }]`). Пусто — воркер не стартует (`Warning`), фронтенд: «Календарь не подключён». |
+| `Calendar__WebcalUrl` | пусто | Устаревший одиночный URL — используется, только если `Sources` пуст (цвет `#007AFF`). |
 | `Calendar__IntervalMinutes` | 15 | Интервал загрузки |
 | `Calendar__DaysAhead` | 7 | Дней вперёд от сегодня |
-| `Calendar__TimeZone` | `Europe/Moscow` (в compose — из `TZ`) | Пояс устройства (IANA) для «плавающих» событий и событий «весь день». В образе `aspnet:10.0` есть `/usr/share/zoneinfo`. |
+| `Calendar__TimeZone` | `Europe/Moscow` (в compose — из `TZ`) | Пояс устройства (IANA). В образе `aspnet:10.0` есть `/usr/share/zoneinfo`. |
+
+**Секреты.** Публичные ссылки iCloud/Outlook открывают календарь **без пароля**, поэтому реальные адреса **никогда не попадают в git**:
+- Docker / Pi — в `.env` (в `.gitignore`); compose передаёт его в сервис `api` целиком (`env_file: [{ path: .env, required: false }]`) — так проходит массив `Calendar__Sources__N__*`.
+- Локальный `dotnet run` (Development) — .NET user-secrets (`UserSecretsId` в `DeskHub.Api.csproj`, значения в `~/.microsoft/usersecrets/…`, вне репозитория): `dotnet user-secrets set "Calendar:Sources:0:Url" "webcal://…"`.
+- `.env.example` и `appsettings*.json` (в git) содержат только структуру и цвета с заглушками вместо токенов.
+- **Логи:** воркер пишет только номер и хост источника (`#3 outlook.office365.com`), из текста ошибок URL вырезается. Встроенное логирование `HttpClient` (`Start processing HTTP request GET <полный URL>`, уровень Information) **отключено** для клиента календарей (`.RemoveAllLoggers()`), а категория `System.Net.Http.HttpClient` поднята до `Warning` в `appsettings.json`. Проверено: в логе локального запуска и Docker-контейнера токенов ссылок — 0.
 
 ### 8.2. Алгоритм
 
 ```
 каждые 15 мин:
-  1. webcal:// → https:// (та же ссылка по HTTPS), GET (named HttpClient "AppleCalendar", таймаут 30 с, gzip/br, редиректы iCloud)
-  2. Ical.Net: Calendar.Load(stream)
-  3. Диапазон [сегодня 00:00; max(сегодня + DaysAhead + 1 день, 1-е число следующего месяца))
-     — повестке нужны сегодня/завтра, точкам в сетке месяца — дни до конца месяца
-  4. calendar.GetOccurrences(сегодня − 31 день).TakeWhileBefore(конец диапазона)
-     — повторяющиеся события (RRULE/RDATE/EXDATE) разворачивает Ical.Net; запас назад — чтобы поймать
-       многодневные события, начавшиеся раньше диапазона
-  5. Оставить вхождения, пересекающие диапазон (end > start диапазона && start < end диапазона), максимум 300
-  6. Время → пояс устройства (см. 8.3); сортировка: по началу, «весь день» раньше, по названию
-  7. CalendarModel { events, rangeStart, rangeEnd, updatedAt } → DashboardNotifier.SendCalendarUpdate
-ошибка (сеть, HTTP, битый .ics) → Warning, повтор через 2 мин; на экране остаются прежние события
+  1. range = [сегодня 00:00; max(сегодня + DaysAhead + 1 день, 1-е число следующего месяца))
+  2. Все источники ПАРАЛЛЕЛЬНО (Task.WhenAll); для каждого — свой try/catch:
+       webcal:// → https://, GET (HttpClient "Calendar": таймаут 30 с, gzip/br, редиректы)
+       Ical.Net: Calendar.Load → GetOccurrences(сегодня − 31 день).TakeWhileBefore(конец range)
+       (RRULE/RDATE/EXDATE разворачивает Ical.Net), фильтр пересечения с range, до 300 событий на календарь
+       каждому событию — Color его календаря
+  3. Успех источника → запомнить его события (кэш по индексу).
+     Сбой источника → Warning с номером и хостом; вместо него — события из последней успешной загрузки
+     этого источника (если ей < 6 ч; закончившиеся до начала range отбрасываются) — события не «мигают».
+  4. Слияние всех источников в один плоский список: сортировка по StartTime, в один момент — сначала «весь день», затем по названию
+  5. CalendarModel { events, rangeStart, rangeEnd, updatedAt } → DashboardNotifier.SendCalendarUpdate
+  6. Следующий цикл: через 15 мин, если загрузились все; через 2 мин, если был сбой.
+     Сбой всех без кэша → ничего не рассылается, на экране прежние данные.
 ```
+
+Проверено (08.10.2026): 4 реальных календаря загружаются одновременно (ответы приходят в произвольном порядке), 52 события за 08.10–31.10 — 10 + 3 + 36 из iCloud и 3 из Outlook; Outlook (Windows-имена часовых поясов в TZID) корректно приводится к `+03:00` и на macOS, и в Linux-контейнере. С пятым заведомо недоступным источником: «52 events from 4/5 calendars», остальные не пострадали.
 
 ### 8.3. Время (проверено на тестовом .ics)
 
 | Вид события в .ics | Как читается | Пример |
 |---|---|---|
-| `DTSTART;TZID=Europe/Moscow:…` | `AsUtc` → пояс устройства | стендап 10:15 MSK → `10:15+03:00` |
+| `DTSTART;TZID=Europe/Moscow:…` (или Windows-имя пояса у Outlook) | `AsUtc` → пояс устройства | стендап 10:15 MSK → `10:15+03:00` |
 | `DTSTART:…Z` (UTC) | `AsUtc` → пояс устройства | 15:00Z → `18:00+03:00` |
 | `DTSTART:20261009T193000` («плавающее», без пояса) | **как время устройства** — `AsUtc` Ical.Net считает его UTC, что сдвинуло бы событие на +3 ч | `19:30+03:00`, не 22:30 |
 | `DTSTART;VALUE=DATE:20261008` («весь день») | полночь даты в поясе устройства, `isAllDay = true`, конец не включительно | 08.10 00:00 → 09.10 00:00 |
@@ -363,4 +383,4 @@ public sealed class LinuxTelemetryReader(IOptions<TelemetryOptions> opt) : ITele
 
 ### 8.4. Контракт
 
-`CalendarEventModel { title, startTime, endTime, isAllDay, location }` (ISO со смещением пояса устройства), `CalendarModel { events, rangeStart, rangeEnd, updatedAt }`; событие хаба `CalendarUpdated`; в snapshot — поле `calendar` (`null`, если не подключён или ещё не загружен).
+`CalendarEventModel { title, startTime, endTime, isAllDay, location, color }` (время — ISO со смещением пояса устройства, `color` — #RRGGBB календаря), `CalendarModel { events, rangeStart, rangeEnd, updatedAt }`; событие хаба `CalendarUpdated`; в snapshot — поле `calendar` (`null`, если не подключён или ещё не загружен).

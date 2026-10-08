@@ -47,7 +47,8 @@ export const Room = memo(function Room({ isNight, layout }: { isNight: boolean; 
       <line x1={0} y1={floorTop + 22} x2={w} y2={floorTop + 22} stroke={C.floorLine} strokeWidth={2} />
       <line x1={0} y1={floorTop + 46} x2={w} y2={floorTop + 46} stroke={C.floorLine} strokeWidth={2} />
 
-      <StringLights width={w} sag={Math.min(26, 10 + verticalShift / 4)} isNight={isNight} />
+      {/* Гирлянда — только в высокой комнате (≥ 24 px над базовым макетом), иначе наползает на лампу */}
+      {verticalShift >= 24 && <StringLights width={w} sag={Math.min(26, 10 + verticalShift / 4)} isNight={isNight} />}
 
       {/* Шнур лампы — от потолка, какой бы высоты ни была комната */}
       <line x1={lampX} y1={0} x2={lampX} y2={22 + verticalShift} stroke={C.frame} strokeWidth={2} />

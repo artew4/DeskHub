@@ -41,6 +41,10 @@ services:
     image: deskhub-api:latest
     container_name: deskhub-api
     restart: unless-stopped
+    # Массив календарей (Calendar__Sources__N__Url/Color) передаётся из .env целиком — перечислять в environment неудобно
+    env_file:
+      - path: .env
+        required: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,7 +59,6 @@ services:
       OpenMeteo__LocationName: ${OpenMeteo__LocationName:-Москва}
       OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
       Traffic__Provider: ${Traffic__Provider:-Yandex}   # Yandex | Mock
-      Calendar__WebcalUrl: ${Calendar__WebcalUrl:-}
       Calendar__TimeZone: ${TZ:-Europe/Moscow}
       Telemetry__ProcRoot: /host/proc
       Telemetry__SysRoot: /host/sys
@@ -97,6 +100,7 @@ volumes:
 | **БД без `ports`** | PostgreSQL виден только сервису `api` во внутренней сети compose (`Host=postgres`). |
 | **Вольюм `pgdata`** | Именованный вольюм Docker → данные переживают пересоздание контейнера и обновление образа. Хранится в `/var/lib/docker/volumes/deskhub_pgdata`. При наличии NVMe SSD каталог Docker (`data-root`) рекомендуется перенести на SSD. |
 | **`depends_on: service_healthy`** | `api` стартует после готовности сервиса `postgres`; ретраи миграций в коде — вторая линия защиты. |
+| **`env_file: .env` (required: false)** | Сервис `api` получает весь `.env` — так передаётся массив календарей `Calendar__Sources__N__*`, который неудобно перечислять в `environment`. Без `.env` запуск не падает. |
 | **`/proc`, `/sys` → `/host/*:ro`** | Явный read-only доступ к метрикам хоста для `TelemetryWorker`. Пути передаются через `Telemetry__ProcRoot/SysRoot`. |
 | **`TZ`** | Совпадает с таймзоной хоста — часы пик, ночной режим и retention считаются в локальном времени. |
 | **`restart: unless-stopped`** | Автоподъём после перезагрузки Pi и падений; не поднимает контейнер, остановленный вручную. |
@@ -124,9 +128,18 @@ OpenMeteo__Longitude=37.6173
 OpenMeteo__LocationName=Москва
 OpenMeteo__IntervalMinutes=15
 
-# --- Календарь iCloud: «Поделиться календарём» → «Публичный календарь» → ссылка webcal://…
-# Ссылка открывает календарь без пароля — не коммитить! Пусто — календарь не подключён.
-Calendar__WebcalUrl=
+# --- Календари (iCloud, Outlook, любой публичный .ics) — массив Calendar__Sources__N__Url / __Color ---
+# iCloud: Календарь → «Поделиться» → «Публичный календарь» → webcal://…; Outlook: «Опубликовать календарь» → ссылка .ics.
+# Ссылки открывают календари без пароля — НЕ КОММИТИТЬ: реальные значения только в .env (он в .gitignore).
+# Цвета — палитра iOS. Пустой список — календарь не подключён.
+Calendar__Sources__0__Url=webcal://pXX-caldav.icloud.com/published/2/<токен-личного>
+Calendar__Sources__0__Color=#34C759
+Calendar__Sources__1__Url=webcal://pXX-caldav.icloud.com/published/2/<токен-семейного>
+Calendar__Sources__1__Color=#007AFF
+Calendar__Sources__2__Url=webcal://pXX-caldav.icloud.com/published/2/<токен-третьего>
+Calendar__Sources__2__Color=#AF52DE
+Calendar__Sources__3__Url=https://outlook.office365.com/owa/calendar/<id>/<токен>/reachcalendar.ics
+Calendar__Sources__3__Color=#FF9500
 
 # --- Пробки: Yandex (веб-версия Яндекс Карт, ключ не нужен) | Mock (генератор для разработки) ---
 Traffic__Provider=Yandex

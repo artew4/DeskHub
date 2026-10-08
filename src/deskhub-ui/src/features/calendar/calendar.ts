@@ -7,8 +7,12 @@ export interface CalendarDay {
   isToday: boolean
   isPast: boolean
   isWeekend: boolean
-  hasEvents: boolean
+  /** Цвета календарей с событиями в этот день — уникальные, в порядке первого события, не больше MAX_DAY_DOTS */
+  eventColors: string[]
 }
+
+/** Больше точек под датой не помещается в колонку 7-дневной сетки. */
+export const MAX_DAY_DOTS = 3
 
 /** Ячейка сетки: день месяца или пустая ячейка-отступ перед первым числом. */
 export type CalendarCell = CalendarDay | null
@@ -18,8 +22,8 @@ export const WEEKDAY_LABELS = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', '
 /** getDay(): 0 = воскресенье … 6 = суббота → индекс в неделе с понедельника: 0 = Пн … 6 = Вс. */
 export const mondayIndex = (date: Date): number => (date.getDay() + 6) % 7
 
-/** daysWithEvents — номера дней месяца, в которые есть события (точка под датой). */
-export function buildMonthGrid(today: Date, daysWithEvents: ReadonlySet<number> = new Set()): CalendarCell[] {
+/** dayColors — для номера дня месяца цвета календарей, у которых в этот день есть события. */
+export function buildMonthGrid(today: Date, dayColors: ReadonlyMap<number, string[]> = new Map()): CalendarCell[] {
   const year = today.getFullYear()
   const month = today.getMonth()
   const daysInMonth = new Date(year, month + 1, 0).getDate() // 0-й день следующего месяца = последний день текущего
@@ -33,7 +37,7 @@ export function buildMonthGrid(today: Date, daysWithEvents: ReadonlySet<number> 
       isToday: day === today.getDate(),
       isPast: day < today.getDate(),
       isWeekend: weekday >= 5,
-      hasEvents: daysWithEvents.has(day),
+      eventColors: (dayColors.get(day) ?? []).slice(0, MAX_DAY_DOTS),
     })
   }
   return cells
@@ -65,21 +69,28 @@ export function eventsOnDay(events: CalendarEventModel[], day: Date): CalendarEv
   return events.filter((e) => overlaps(e, from, startOfDay(day, 1)))
 }
 
-/** Номера дней месяца `monthOf`, в которые есть хотя бы одно событие. */
-export function daysWithEvents(events: CalendarEventModel[], monthOf: Date): Set<number> {
+/**
+ * Для каждого дня месяца `monthOf` — цвета календарей, у которых в этот день есть события
+ * (уникальные, в порядке появления: события отсортированы по началу).
+ */
+export function dayEventColors(events: CalendarEventModel[], monthOf: Date): Map<number, string[]> {
   const year = monthOf.getFullYear()
   const month = monthOf.getMonth()
   const monthStart = new Date(year, month, 1).getTime()
   const monthEnd = new Date(year, month + 1, 1).getTime()
-  const days = new Set<number>()
+  const days = new Map<number, string[]>()
+  const mark = (t: number, color: string) => {
+    const day = new Date(t).getDate()
+    const colors = days.get(day) ?? []
+    if (!colors.includes(color)) colors.push(color)
+    days.set(day, colors)
+  }
   for (const e of events) {
     const start = Math.max(Date.parse(e.startTime), monthStart)
     const end = Math.min(Date.parse(e.endTime), monthEnd)
     // Обходим дни события; конец не включительно (событие «весь день» 8-го заканчивается в 00:00 9-го)
-    for (let t = start; t < end; t = startOfDay(new Date(t), 1).getTime()) {
-      days.add(new Date(t).getDate())
-    }
-    if (end === start && start >= monthStart && start < monthEnd) days.add(new Date(start).getDate()) // нулевая длительность
+    for (let t = start; t < end; t = startOfDay(new Date(t), 1).getTime()) mark(t, e.color)
+    if (end === start && start >= monthStart && start < monthEnd) mark(start, e.color) // нулевая длительность
   }
   return days
 }

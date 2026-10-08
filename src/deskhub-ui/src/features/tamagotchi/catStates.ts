@@ -58,8 +58,9 @@ export interface RoomLayout {
 }
 
 export function roomLayout(width: number, height: number): RoomLayout {
-  const w = Math.max(width, BASE_ROOM.width)
-  const h = Math.max(height, BASE_ROOM.height)
+  // Комната может быть и чуть меньше базового макета (ячейка 572×276 на 1024×600) — объекты сдвигаются на пару пикселей
+  const w = Math.max(width, 480)
+  const h = Math.max(height, 240)
   const floorTop = h - (BASE_ROOM.height - BASE_ROOM.floorTop)
   const verticalShift = floorTop - BASE_ROOM.floorTop
   const centerShift = Math.round(w / 2 - BASE_ROOM.width / 2)

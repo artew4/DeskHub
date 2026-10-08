@@ -15,23 +15,34 @@ namespace DeskHub.Api.Services.Calendar;
 /// - «плавающее» (без пояса) — AsUtc ошибочно считает его UTC, поэтому трактуется как время устройства;
 /// - «весь день» (VALUE=DATE) — полночь даты в поясе устройства, конец не включительно.
 /// </summary>
+/// <summary>Диапазон дат, за который собираются события: [Start; End) в поясе устройства.</summary>
+public sealed record CalendarRange(DateTimeOffset Start, DateTimeOffset End, TimeZoneInfo TimeZone)
+{
+    /// <summary>[сегодня 00:00; max(сегодня + daysAhead + 1 день, 1-е число следующего месяца)).</summary>
+    public static CalendarRange For(DateTimeOffset now, TimeZoneInfo tz, int daysAhead)
+    {
+        var today = TimeZoneInfo.ConvertTime(now, tz).Date;
+        var firstOfNextMonth = new DateTime(today.Year, today.Month, 1).AddMonths(1);
+        var end = today.AddDays(daysAhead + 1) > firstOfNextMonth ? today.AddDays(daysAhead + 1) : firstOfNextMonth;
+        return new CalendarRange(IcsCalendarParser.AtLocal(today, tz), IcsCalendarParser.AtLocal(end, tz), tz);
+    }
+}
+
 public static class IcsCalendarParser
 {
     /// <summary>Запас назад при поиске: многодневное событие могло начаться раньше диапазона.</summary>
     private static readonly TimeSpan LookBehind = TimeSpan.FromDays(31);
-    private const int MaxEvents = 300;
+    /// <summary>Предел на один календарь — защита от гигантских фидов.</summary>
+    private const int MaxEventsPerSource = 300;
 
-    public static CalendarModel Parse(Stream ics, DateTimeOffset now, TimeZoneInfo tz, int daysAhead)
+    /// <summary>События одного календаря в диапазоне; каждому присваивается цвет календаря.</summary>
+    public static List<CalendarEventModel> Parse(Stream ics, CalendarRange range, string color)
     {
         var calendar = IcalCalendar.Load(ics) ?? throw new InvalidDataException("Empty iCalendar");
+        var tz = range.TimeZone;
+        var (rangeStart, rangeEnd) = (range.Start, range.End);
 
-        var localNow = TimeZoneInfo.ConvertTime(now, tz);
-        var today = localNow.Date;
-        var rangeStart = AtLocal(today, tz);
-        var firstOfNextMonth = new DateTime(today.Year, today.Month, 1).AddMonths(1);
-        var rangeEnd = AtLocal(Max(today.AddDays(daysAhead + 1), firstOfNextMonth), tz);
-
-        var searchFrom = new CalDateTime(today - LookBehind, tz.Id, hasTime: true);
+        var searchFrom = new CalDateTime(rangeStart.DateTime - LookBehind, tz.Id, hasTime: true);
         var searchTo = new CalDateTime(rangeEnd.DateTime, tz.Id, hasTime: true);
 
         var events = new List<CalendarEventModel>();
@@ -48,19 +59,22 @@ public static class IcsCalendarParser
                 StartTime: start,
                 EndTime: end,
                 IsAllDay: source.IsAllDay || !occurrence.Period.StartTime.HasTime,
-                Location: string.IsNullOrWhiteSpace(source.Location) ? null : source.Location.Trim()));
+                Location: string.IsNullOrWhiteSpace(source.Location) ? null : source.Location.Trim(),
+                Color: color));
 
-            if (events.Count >= MaxEvents) break;
+            if (events.Count >= MaxEventsPerSource) break;
         }
 
-        var ordered = events
+        return events;
+    }
+
+    /// <summary>Слияние календарей в один список: по началу, в один момент — сначала «весь день», затем по названию.</summary>
+    public static List<CalendarEventModel> Merge(IEnumerable<IEnumerable<CalendarEventModel>> sources) =>
+        sources.SelectMany(e => e)
             .OrderBy(e => e.StartTime)
             .ThenByDescending(e => e.IsAllDay)
             .ThenBy(e => e.Title, StringComparer.CurrentCulture)
             .ToList();
-
-        return new CalendarModel(ordered, rangeStart, rangeEnd, now);
-    }
 
     internal static DateTimeOffset ToLocal(CalDateTime value, TimeZoneInfo tz)
     {
@@ -70,11 +84,9 @@ public static class IcsCalendarParser
     }
 
     /// <summary>Местное время без пояса → DateTimeOffset со смещением пояса на эту дату.</summary>
-    private static DateTimeOffset AtLocal(DateTime wallClock, TimeZoneInfo tz)
+    internal static DateTimeOffset AtLocal(DateTime wallClock, TimeZoneInfo tz)
     {
         var unspecified = DateTime.SpecifyKind(wallClock, DateTimeKind.Unspecified);
         return new DateTimeOffset(unspecified, tz.GetUtcOffset(unspecified));
     }
-
-    private static DateTime Max(DateTime a, DateTime b) => a > b ? a : b;
 }

@@ -198,7 +198,7 @@ builder.Services
 
 Singleton, хранящий **последнее известное значение** каждого виджета и кольцевой буфер истории телеметрии (120 точек).
 
-> **Текущая реализация** (`Services/DashboardState.cs`): хранит последние `WeatherModel`, `TrafficModel`, `TelemetryModel`, `CalendarModel` — все от воркеров (`WeatherWorker`, `TrafficWorker`, `TelemetryWorker`, `AppleCalendarWorker`), `null` до первого успешного обновления. Заглушек (`StubData`) больше нет. Обновляется только через `DashboardNotifier`. Кольцевой буфер истории ещё не реализован. Важно: snapshot не должен генерировать данные «на лету» с текущим временем — иначе при реконнекте он затрёт более свежие push-данные несмотря на проверку `updatedAt` на клиенте.
+> **Текущая реализация** (`Services/DashboardState.cs`): хранит последние `WeatherModel`, `TrafficModel`, `TelemetryModel`, `CalendarModel` — все от воркеров (`WeatherWorker`, `TrafficWorker`, `TelemetryWorker`, `CalendarWorker`), `null` до первого успешного обновления. Заглушек (`StubData`) больше нет. Обновляется только через `DashboardNotifier`. Кольцевой буфер истории ещё не реализован. Важно: snapshot не должен генерировать данные «на лету» с текущим временем — иначе при реконнекте он затрёт более свежие push-данные несмотря на проверку `updatedAt` на клиенте.
 
 ```csharp
 public sealed class DashboardState

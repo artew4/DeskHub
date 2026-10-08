@@ -9,6 +9,10 @@ services:
     image: deskhub-api:latest
     container_name: deskhub-api
     restart: unless-stopped
+    # Массив календарей (Calendar__Sources__N__Url/Color) передаётся из .env целиком — перечислять в environment неудобно
+    env_file:
+      - path: .env
+        required: false
     depends_on:
       postgres:
         condition: service_healthy
@@ -23,7 +27,6 @@ services:
       OpenMeteo__LocationName: ${OpenMeteo__LocationName:-Москва}
       OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
       Traffic__Provider: ${Traffic__Provider:-Yandex}   # Yandex | Mock
-      Calendar__WebcalUrl: ${Calendar__WebcalUrl:-}
       Calendar__TimeZone: ${TZ:-Europe/Moscow}
       Telemetry__ProcRoot: /host/proc
       Telemetry__SysRoot: /host/sys

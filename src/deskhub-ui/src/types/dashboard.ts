@@ -62,6 +62,8 @@ export interface CalendarEventModel {
   endTime: string
   isAllDay: boolean
   location: string | null
+  /** Цвет календаря-источника (#RRGGBB, палитра iOS) */
+  color: string
 }
 
 export interface CalendarModel {
