@@ -58,8 +58,9 @@ src/deskhub-ui/
 | `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
 | `src/App.tsx` | Корень 1024×600 (без отступа — `p-4` внутри экранов), `ScreenCarousel` с `MainScreen` + `SystemScreen`; вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
 | `src/components/ScreenCarousel.tsx` | Карусель экранов: CSS `translate3d` + Pointer Events, свайп за пальцем через ref, порог 100 px, индикатор экранов (`Feature_Dashboard.md`, 8.2) | `app/` |
-| `src/features/dashboard/MainScreen.tsx` | Главный экран, сетка 12×6 (`gap-3 p-4`): часы (кол. 1–7, стр. 1–3), пробки (Пн–Пт 10:00–13:20) или кот (кол. 1–7, стр. 4–6), погода (кол. 8–12, стр. 1–3), календарь (кол. 8–12, стр. 4–6) | на месте |
+| `src/features/dashboard/MainScreen.tsx` | Главный экран, сетка 12×6 (`gap-3 p-4`): часы (кол. 1–7, стр. 1–3), мини-карусель «пробки ↔ кот» (кол. 1–7, стр. 4–6), погода (кол. 8–12, стр. 1–3), календарь (кол. 8–12, стр. 4–6) | на месте |
 | `src/features/dashboard/SystemScreen.tsx` | Системный экран: заголовок «Система» + подсказка, телеметрия (кол. 1–5, стр. 2–4) | на месте |
+| `src/features/dashboard/BottomLeftCarousel.tsx` | Вертикальная мини-карусель «Пробки ↔ Кот» в левой нижней ячейке: дефолт по тайм-окну, свайп вверх/вниз, автовозврат 30 с; вертикальные жесты забирает у `ScreenCarousel` (`Feature_Dashboard.md`, 9.1) | на месте |
 | `src/features/tamagotchi/` | `TamagotchiWidget.tsx`, `Room.tsx`, `Cat.tsx`, `catStates.ts` (состояния, веса, планирование — чистые функции), `useCatBrain.ts` (цепочка `setTimeout`) — `Feature_Dashboard.md`, 9 | на месте |
 | `src/features/traffic/trafficWindow.ts`, `useTrafficWindow.ts` | Окно показа пробок: Пн–Пт 10:00–13:20 | на месте |
 | `src/features/calendar/` | `CalendarWidget.tsx` (органайзер в стиле iOS: сетка месяца с цветными точками календарей + повестка сегодня/завтра с цветной полосой) + `calendar.ts` (сетка на `Date`, цвета событий по дням, подписи времени, фаза «идёт сейчас») | на месте |
