@@ -1,4 +1,4 @@
-import { memo } from 'react'
+import { createContext, memo, use } from 'react'
 import type { CatPose, Facing } from './catStates'
 
 // Рыжий кот — самый заметный объект в тёмной комнате
@@ -8,25 +8,34 @@ const CREAM = '#F3E3CF'
 const EAR = '#F2A7A0'
 const EYE = '#1B1F24'
 const NOSE = '#E07A7A'
+/** Глаза ночью: светятся в темноте, как у настоящего кота в свете лампы */
+const GLOW = '#D8F06A'
 
 /**
  * Векторный кот. Начало координат — точка между лапами (x = 0, y = 0), кот смотрит вправо;
  * разворот — scaleX(facing). Все анимации — CSS keyframes на transform/opacity (tailwind.config.js);
  * transform-box: fill-box задаёт точку вращения относительно самого элемента.
  */
-export const Cat = memo(function Cat({ pose, facing }: { pose: CatPose; facing: Facing }) {
+export const Cat = memo(function Cat({ pose, facing, glow = false }: { pose: CatPose; facing: Facing; glow?: boolean }) {
   return (
     <svg width={96} height={72} viewBox="-48 -64 96 72" className="overflow-visible" aria-hidden>
-      <g style={{ transform: `scaleX(${facing})` }}>
-        {pose === 'sleep' && <SleepingCat />}
-        {(pose === 'sit' || pose === 'swipe' || pose === 'groom') && <SittingCat mode={pose} />}
-        {(pose === 'walk' || pose === 'run') && <WalkingCat running={pose === 'run'} />}
-        {pose === 'stretch' && <StretchingCat />}
-        {pose === 'play' && <PlayingCat />}
-      </g>
+      <GlowContext value={glow}>
+        <g style={{ transform: `scaleX(${facing})` }}>
+          {pose === 'sleep' && <SleepingCat />}
+          {(pose === 'sit' || pose === 'swipe' || pose === 'groom') && <SittingCat mode={pose} />}
+          {(pose === 'walk' || pose === 'run') && <WalkingCat running={pose === 'run'} />}
+          {pose === 'stretch' && <StretchingCat />}
+          {pose === 'play' && <PlayingCat />}
+          {pose === 'watch' && <WatchingCat />}
+          {pose === 'startle' && <StartledCat />}
+        </g>
+      </GlowContext>
     </svg>
   )
 })
+
+/** Ночью глаза светятся (передаётся вниз без пропсов в каждую позу). */
+const GlowContext = createContext(false)
 
 const pivot = (origin: string) => ({ transformBox: 'fill-box' as const, transformOrigin: origin })
 
@@ -43,10 +52,13 @@ function Eyes({ cx, cy, gap, closed = false }: { cx: number; cy: number; gap: nu
       />
     )
   }
+  const glow = use(GlowContext)
   return (
     <g className="motion-safe:animate-cat-blink" style={pivot('center')}>
-      <ellipse cx={cx - gap} cy={cy} rx={1.7} ry={2.4} fill={EYE} />
-      <ellipse cx={cx + gap} cy={cy} rx={1.7} ry={2.4} fill={EYE} />
+      {glow && <circle cx={cx - gap} cy={cy} r={3.4} fill={GLOW} opacity={0.3} />}
+      {glow && <circle cx={cx + gap} cy={cy} r={3.4} fill={GLOW} opacity={0.3} />}
+      <ellipse cx={cx - gap} cy={cy} rx={1.7} ry={2.4} fill={glow ? GLOW : EYE} />
+      <ellipse cx={cx + gap} cy={cy} rx={1.7} ry={2.4} fill={glow ? GLOW : EYE} />
       <circle cx={cx - gap + 0.6} cy={cy - 0.9} r={0.6} fill="#FFFFFF" />
       <circle cx={cx + gap + 0.6} cy={cy - 0.9} r={0.6} fill="#FFFFFF" />
     </g>
@@ -144,6 +156,7 @@ function SleepingCat() {
 
 /** Голова в профиль (идёт, бежит, играет). */
 function SideHead({ wide = false }: { wide?: boolean }) {
+  const glow = use(GlowContext)
   return (
     <>
       <path d="M-7,-5 L-6,-16 L0,-8 Z M2,-8 L7,-16 L8,-3 Z" fill={FUR} />
@@ -151,7 +164,8 @@ function SideHead({ wide = false }: { wide?: boolean }) {
       <circle r={9.5} fill={FUR} />
       <ellipse cx={6} cy={3.5} rx={4.5} ry={3.2} fill={CREAM} />
       {/* В игре зрачки расширены */}
-      <ellipse cx={3.5} cy={-1.5} rx={wide ? 2.2 : 1.6} ry={wide ? 2.8 : 2.3} fill={EYE} />
+      {glow && <circle cx={3.5} cy={-1.5} r={4} fill={GLOW} opacity={0.3} />}
+      <ellipse cx={3.5} cy={-1.5} rx={wide ? 2.2 : 1.6} ry={wide ? 2.8 : 2.3} fill={glow ? GLOW : EYE} />
       {wide && <circle cx={4.2} cy={-2.5} r={0.7} fill="#FFFFFF" />}
       <path d="M8.6,1.6 L10.4,2.4 L8.8,3.4 Z" fill={NOSE} />
     </>
@@ -225,6 +239,60 @@ function StretchingCat() {
         <path d="M0,-2 q2,-2 4,0" fill="none" stroke={EYE} strokeWidth={1.3} strokeLinecap="round" />
         {/* Зевок */}
         <ellipse cx={7} cy={5} rx={2} ry={2.6} fill="#5A2E2E" className="motion-safe:animate-cat-yawn" style={pivot('top')} />
+      </g>
+    </g>
+  )
+}
+
+/**
+ * Испуг («включили свет»): кот подпрыгивает на месте и дрожит, спина дугой, шерсть дыбом,
+ * хвост трубой и распушён, уши прижаты, глаза круглые с маленькими зрачками.
+ */
+function StartledCat() {
+  return (
+    <g className="motion-safe:animate-cat-startle-jump">
+      <g className="motion-safe:animate-cat-tremble">
+        {/* Хвост трубой, распушён */}
+        <path d="M-20,-26 C-24,-38 -20,-48 -24,-58" fill="none" stroke={FUR} strokeWidth={8} strokeLinecap="round" />
+        <path d="M-27,-34 l-3,-2 M-17,-40 l3,-2 M-27,-46 l-3,-2 M-18,-52 l3,-2" stroke={FUR} strokeWidth={2} strokeLinecap="round" />
+        {/* Лапы прямые, на цыпочках */}
+        {[-16, -10, 10, 16].map((x) => (
+          <line key={x} x1={x} y1={-16} x2={x} y2={0} stroke={FUR} strokeWidth={4.5} strokeLinecap="round" />
+        ))}
+        {/* Спина дугой + шерсть дыбом */}
+        <path d="M-22,-16 C-22,-40 20,-40 20,-16 Z" fill={FUR} />
+        <path d="M-18,-30 l3,-7 l3,6 l3,-8 l3,7 l3,-8 l3,7 l3,-7 l3,6 l3,-6" fill="none" stroke={FUR} strokeWidth={3} strokeLinejoin="round" />
+        <path d="M-10,-30 q3,4 0,8 M-2,-32 q3,4 0,8 M6,-31 q3,4 0,8" fill="none" stroke={STRIPE} strokeWidth={1.6} strokeLinecap="round" />
+        <ellipse cx={0} cy={-17} rx={13} ry={3.5} fill={CREAM} />
+        {/* Голова анфас: уши прижаты, глаза круглые */}
+        <g transform="translate(20 -22)">
+          <path d="M-11,-3 L-15,-11 L-4,-8 Z M11,-3 L15,-11 L4,-8 Z" fill={FUR} />
+          <circle r={10} fill={FUR} />
+          <ellipse cy={4.5} rx={5} ry={3.4} fill={CREAM} />
+          <circle cx={-4} cy={-1.5} r={3.2} fill="#FFFFFF" />
+          <circle cx={4} cy={-1.5} r={3.2} fill="#FFFFFF" />
+          <circle cx={-4} cy={-1.5} r={1.1} fill={EYE} />
+          <circle cx={4} cy={-1.5} r={1.1} fill={EYE} />
+          <ellipse cy={6} rx={1.6} ry={1.2} fill="#5A2E2E" />
+        </g>
+      </g>
+    </g>
+  )
+}
+
+/** Смотрит в окно — вид со спины: голова чуть покачивается (следит за каплями/снежинками), хвост лежит рядом. */
+function WatchingCat() {
+  return (
+    <g>
+      <path d="M12,-3 C26,-2 30,-14 22,-22" fill="none" stroke={FUR} strokeWidth={5} strokeLinecap="round" className="motion-safe:animate-cat-tail" style={{ ...pivot('bottom left'), animationDuration: '5s' }} />
+      <path d="M-15,0 C-17,-15 -11,-31 0,-31 C11,-31 17,-15 15,0 Z" fill={FUR} />
+      <path d="M-9,-22 q9,3 18,0 M-11,-14 q11,3 22,0 M-12,-6 q12,3 24,0" fill="none" stroke={STRIPE} strokeWidth={1.6} strokeLinecap="round" />
+      <g transform="translate(0 -37)">
+        <g className="motion-safe:animate-cat-head-tilt" style={{ ...pivot('bottom'), animationDuration: '6s' }}>
+          <path d="M-10,-4 L-9,-17 L-1,-9 Z M10,-4 L9,-17 L1,-9 Z" fill={FUR} />
+          <circle r={11} fill={FUR} />
+          <path d="M-4,-9 q4,2 8,0 M-5,-4 q5,2 10,0" fill="none" stroke={STRIPE} strokeWidth={1.4} strokeLinecap="round" />
+        </g>
       </g>
     </g>
   )

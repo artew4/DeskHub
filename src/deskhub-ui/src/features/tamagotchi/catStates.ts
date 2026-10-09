@@ -1,5 +1,7 @@
 // «Кошачий мозг»: состояния, веса, тайминги, якоря комнаты и планирование шагов. Чистые функции — без React и таймеров.
 
+import type { RoomPhase } from './roomEnvironment'
+
 export type CatState =
   | 'SLEEPING_RUG'
   | 'WINDOW_WATCHING'
@@ -10,9 +12,10 @@ export type CatState =
   | 'PLAYING_YARN'
   | 'ZOOMIES'
   | 'KNOCKING_ITEM'
+  | 'HUNTING'
 
 /** Поза определяет, какой рисунок кота показывать. */
-export type CatPose = 'sit' | 'sleep' | 'walk' | 'run' | 'swipe' | 'stretch' | 'groom' | 'play'
+export type CatPose = 'sit' | 'sleep' | 'walk' | 'run' | 'swipe' | 'stretch' | 'groom' | 'play' | 'watch' | 'startle'
 
 export type Facing = 1 | -1
 
@@ -118,23 +121,24 @@ export const STATE_LABELS: Record<CatState, string> = {
   PLAYING_YARN: 'играет с клубком',
   ZOOMIES: 'носится как угорелый',
   KNOCKING_ITEM: 'скидывает кружку',
+  HUNTING: 'охотится',
 }
 
 /**
- * Базовые веса. Живой кот в основном спит и сидит, изредка играет и совсем редко бесится.
- * STRETCHING случайно не выбирается — это реакция на пробуждение (см. pickNextState).
+ * Веса по фазе суток (фаза комнаты: утро 06–11, день 11–17, вечер 17–21, ночь 21–06).
+ * Днём кот ленивый: сон + «отдых» (окно, полка, умывание) ≈ 75 %. Вечером и ночью просыпается охотник:
+ * игра, охота и «тыгыдык» ≈ 40–45 %. STRETCHING случайно не выбирается — это реакция на пробуждение.
  */
-const BASE_WEIGHTS: Record<CatState, number> = {
-  SLEEPING_RUG: 30,
-  WINDOW_WATCHING: 18,
-  SHELF_SITTING: 12,
-  GROOMING: 12,
-  WALKING: 10,
-  PLAYING_YARN: 7,
-  ZOOMIES: 6,
-  KNOCKING_ITEM: 5,
-  STRETCHING: 0,
+const PHASE_WEIGHTS: Record<RoomPhase, Record<CatState, number>> = {
+  //            сон  окно полка умыв. прогулка клубок охота тыгыдык кружка потяг.
+  morning: { SLEEPING_RUG: 26, WINDOW_WATCHING: 16, SHELF_SITTING: 10, GROOMING: 14, WALKING: 12, PLAYING_YARN: 8, HUNTING: 6, ZOOMIES: 4, KNOCKING_ITEM: 4, STRETCHING: 0 },
+  day: { SLEEPING_RUG: 42, WINDOW_WATCHING: 13, SHELF_SITTING: 12, GROOMING: 10, WALKING: 8, PLAYING_YARN: 5, HUNTING: 3, ZOOMIES: 2, KNOCKING_ITEM: 3, STRETCHING: 0 },
+  evening: { SLEEPING_RUG: 10, WINDOW_WATCHING: 9, SHELF_SITTING: 7, GROOMING: 8, WALKING: 14, PLAYING_YARN: 20, HUNTING: 17, ZOOMIES: 9, KNOCKING_ITEM: 6, STRETCHING: 0 },
+  night: { SLEEPING_RUG: 14, WINDOW_WATCHING: 9, SHELF_SITTING: 6, GROOMING: 6, WALKING: 12, PLAYING_YARN: 17, HUNTING: 20, ZOOMIES: 10, KNOCKING_ITEM: 6, STRETCHING: 0 },
 }
+
+/** Дождь/снег за окном: «смотрит в окно» ×4 — кот залипает на капли и снежинки. */
+const PRECIPITATION_WINDOW_BOOST = 4
 
 /** Вероятность потянуться после сна. */
 const STRETCH_AFTER_SLEEP = 0.8
@@ -143,31 +147,32 @@ export interface PickContext {
   /** Последние состояния, новые — в конце */
   history: CatState[]
   mugOnShelf: boolean
-  isNight: boolean
-  /** Кота только что разбудили тапом */
-  justWoken: boolean
+  /** Фаза суток комнаты */
+  phase: RoomPhase
+  /** За окном дождь/снег/гроза (по реальной погоде) */
+  precipitation: boolean
 }
 
 /**
  * Взвешенный случайный выбор следующего состояния:
- * - разбудили тапом — всегда потягушки; проснулся сам — потягушки с вероятностью 80 %;
+ * - веса — по фазе суток (PHASE_WEIGHTS); осадки за окном — окно ×4;
+ * - проснулся сам — потягушки с вероятностью 80 % (разбуженный тапом потягивается через planReaction);
  * - после «тыгыдыка» кот выдохся: сон и умывание ×3;
  * - то же состояние два раза подряд невозможно, состояния из последних трёх — половинный вес;
- * - ночью сон ×2, «тыгыдык» ×0.5; кружку можно скинуть, только если она на полке.
+ * - кружку можно скинуть, только если она на полке.
  */
 export function pickNextState(ctx: PickContext, random: () => number = Math.random): CatState {
   const last = ctx.history.at(-1)
-  if (ctx.justWoken) return 'STRETCHING'
   if (last === 'SLEEPING_RUG' && random() < STRETCH_AFTER_SLEEP) return 'STRETCHING'
 
+  const base = PHASE_WEIGHTS[ctx.phase]
   const recent = new Set(ctx.history.slice(-3))
-  const weighted = (Object.keys(BASE_WEIGHTS) as CatState[]).map((state) => {
-    let weight = BASE_WEIGHTS[state]
+  const weighted = (Object.keys(base) as CatState[]).map((state) => {
+    let weight = base[state]
     if (state === last) weight = 0
     else if (recent.has(state)) weight *= 0.5
     if (last === 'ZOOMIES' && (state === 'SLEEPING_RUG' || state === 'GROOMING')) weight *= 3
-    if (ctx.isNight && state === 'SLEEPING_RUG') weight *= 2
-    if (ctx.isNight && state === 'ZOOMIES') weight *= 0.5
+    if (ctx.precipitation && state === 'WINDOW_WATCHING') weight *= PRECIPITATION_WINDOW_BOOST
     if (state === 'KNOCKING_ITEM' && !ctx.mugOnShelf) weight = 0
     return { state, weight }
   })
@@ -189,6 +194,7 @@ export const DURATIONS_S = {
   grooming: [10, 20],
   stretching: [3, 5],
   walking: [10, 20], // вся прогулка, включая шаги
+  hunting: [10, 20], // вся охота: подкрадывания, засады, прыжки
   playingYarn: [10, 15], // игра, без подхода к клубку
   zoomies: [5, 12], // вся вспышка, включая «отдышаться»
 } as const
@@ -254,8 +260,9 @@ export function planState(
       break
 
     case 'WINDOW_WATCHING':
+      // На подоконнике спиной к комнате — смотрит на улицу (дождь, снег, облака)
       walkTo(anchors.windowSill)
-      stay('sit', ms(DURATIONS_S.calm, random), random() < 0.5 ? 1 : -1)
+      stay('watch', ms(DURATIONS_S.calm, random))
       break
 
     case 'SHELF_SITTING':
@@ -323,6 +330,23 @@ export function planState(
       break
     }
 
+    case 'HUNTING': {
+      // Охота на невидимую добычу: подкрасться (припав к полу, медленно) → засада с вилянием → прыжок; 10–20 с
+      const target = ms(DURATIONS_S.hunting, random)
+      while (elapsed < target - 2500) {
+        const prey = randomFloorPoint(floor, random)
+        const stalkMs = Math.round(clamp(Math.hypot(prey.x - at.x, prey.y - at.y) / 0.05, 2500, 6000)) // ~50 px/с
+        if (elapsed + stalkMs + 1200 + 450 > target) break // подкрасться + засада (мин.) + прыжок должны уместиться
+        walkTo(prey, 'play', stalkMs)
+        stay('play', Math.min(ms([1.2, 2.5], random), target - elapsed - 450)) // оставить время на прыжок
+        const dir = at.facing
+        const pounceX = clamp(at.x + dir * randomBetween(50, 90, random), floor.minX, floor.maxX)
+        walkTo({ x: Math.round(pounceX), y: at.y }, 'run', 450)
+      }
+      stay('sit', target - elapsed)
+      break
+    }
+
     case 'KNOCKING_ITEM':
       walkTo(anchors.shelfNearMug)
       stay('sit', 1500, 1) // прицеливается
@@ -342,3 +366,43 @@ export const initialFrame = (layout: RoomLayout): CatFrame => ({
   facing: 1,
   moveMs: 0,
 })
+
+// ─── Реакции на человека (тап по коту, включение экрана ночью) ────────────────
+
+/**
+ * - `grumpy` — тап по спящему: недовольно проснулся (значок раздражения) и сразу потягивается;
+ * - `hearts` — тап по бодрствующему: сердечки; если он отдыхал или гулял — поворачивается к экрану
+ *   и с вероятностью 50 % идёт играть с клубком; если уже играл/охотился/носился — только сердечки;
+ * - `startle` — экран резко включили ночью (Sleep → Dimmed): испуг — вскочил, шерсть дыбом, «!», затем замер.
+ */
+export type CatReactionKind = 'grumpy' | 'hearts' | 'startle'
+
+/** Состояния, в которых кот активен — тап только радует (сердечки), без прерывания. */
+const ACTIVE_STATES: CatState[] = ['PLAYING_YARN', 'HUNTING', 'ZOOMIES', 'KNOCKING_ITEM', 'STRETCHING']
+
+export function reactionForTap(frame: CatFrame): CatReactionKind {
+  return frame.pose === 'sleep' ? 'grumpy' : 'hearts'
+}
+
+/**
+ * Шаги реакции (прерывают текущий план). null — прерывать не нужно (кот и так активен).
+ * Кот остаётся на месте (moveMs 0) — где спал/сидел, там и реагирует.
+ */
+export function planReaction(kind: CatReactionKind, from: CatFrame, layout: RoomLayout, world: WorldState, random: () => number = Math.random): CatStep[] | null {
+  const here = (state: CatState, pose: CatPose, durationMs: number): CatStep => ({
+    frame: { ...from, state, pose, moveMs: 0 },
+    durationMs,
+  })
+  switch (kind) {
+    case 'grumpy':
+      return [here('STRETCHING', 'stretch', ms(DURATIONS_S.stretching, random))]
+    case 'startle':
+      return [here(from.state, 'startle', 2200), here(from.state, 'sit', 1600)]
+    case 'hearts': {
+      if (ACTIVE_STATES.includes(from.state)) return null
+      const look = here(from.state, 'sit', 1800) // смотрит в экран (сидячая поза — анфас)
+      return random() < 0.5 ? [look, ...planState('PLAYING_YARN', look.frame, layout, world, random)] : [look]
+    }
+  }
+}
+

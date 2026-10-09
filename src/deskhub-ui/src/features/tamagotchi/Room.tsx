@@ -1,5 +1,6 @@
-import { memo } from 'react'
+import { memo, useId } from 'react'
 import type { RoomLayout } from './catStates'
+import { SKYLINE_COLOR, SKY_GRADIENT, isOvercast, lampOn, type RoomPhase, type SkyCondition } from './roomEnvironment'
 
 // Палитра комнаты — приглушённые тона в гамме дашборда (фон карточки — surface-1 #14171C)
 const C = {
@@ -23,8 +24,6 @@ const C = {
   moon: '#F4E9C8',
 }
 
-const SKY = { day: '#2B4F73', night: '#0D1B2E' }
-const SKYLINE = { day: '#22405F', night: '#0A1220' }
 
 /**
  * Комната кота — плоский SVG в реальном размере карточки (1:1, без масштабирования: кот и якоря в тех же пикселях).
@@ -32,8 +31,18 @@ const SKYLINE = { day: '#22405F', night: '#0A1220' }
  * окно — у левого края, лампа/картина/коврик — по центру, полка/растение — у правого края, всё — от уровня пола.
  * Меняется только при смене дня и ночи или размера карточки.
  */
-export const Room = memo(function Room({ isNight, layout }: { isNight: boolean; layout: RoomLayout }) {
-  const sky = isNight ? SKY.night : SKY.day
+/** Плавная смена освещения при смене фазы суток: opacity за 3 с (элемент всегда смонтирован). */
+const TRANSITION = '3s ease-in-out'
+const fade = (opacity: number) => ({ opacity, transition: `opacity ${TRANSITION}` })
+
+interface RoomProps {
+  phase: RoomPhase
+  sky: SkyCondition
+  layout: RoomLayout
+}
+
+export const Room = memo(function Room({ phase, sky, layout }: RoomProps) {
+  const isNight = lampOn(phase) // лампа, огни города и гирлянда — вечером и ночью
   const { width: w, height: h, floorTop, centerShift, rightShift, verticalShift } = layout
   const lampX = 300 + centerShift
   return (
@@ -55,13 +64,13 @@ export const Room = memo(function Room({ isNight, layout }: { isNight: boolean; 
 
       {/* Левая группа: окно и пятно света от него */}
       <g transform={`translate(0 ${verticalShift})`}>
-        {!isNight && <polygon points="66,214 204,214 250,262 40,262" fill="#FFFFFF" opacity={0.035} />}
-        <Window sky={sky} isNight={isNight} />
+        <polygon points="66,214 204,214 250,262 40,262" fill="#FFFFFF" style={fade(!isNight && !isOvercast(sky) ? 0.035 : 0)} />
+        <Window phase={phase} sky={sky} />
       </g>
 
       {/* Центральная группа: лампа, конус света, картина, коврик с лежанкой */}
       <g transform={`translate(${centerShift} ${verticalShift})`}>
-        {isNight && <polygon points="282,36 318,36 384,214 216,214" fill={C.warm} opacity={0.05} />}
+        <polygon points="282,36 318,36 384,214 216,214" fill={C.warm} style={fade(isNight ? 0.05 : 0)} />
         <CenterGroup isNight={isNight} />
       </g>
 
@@ -129,7 +138,7 @@ function CenterGroup({ isNight }: { isNight: boolean }) {
 
       {/* Подвесная лампа (шнур — в Room) */}
       <path d="M286,22 L314,22 L322,36 L278,36 Z" fill={C.frame} />
-      <ellipse cx={300} cy={37} rx={6} ry={2.5} fill={isNight ? C.warm : '#3A414D'} />
+      <ellipse cx={300} cy={37} rx={6} ry={2.5} style={{ fill: isNight ? C.warm : '#3A414D', transition: `fill ${TRANSITION}` }} />
 
       {/* Коврик и лежанка */}
       <ellipse cx={300} cy={256} rx={96} ry={17} fill={C.rug} />
@@ -140,50 +149,87 @@ function CenterGroup({ isNight }: { isNight: boolean }) {
   )
 }
 
-function Window({ sky, isNight }: { sky: string; isNight: boolean }) {
+/** Окно: шторы, рама, небо (градиент по фазе и погоде), светила, силуэт города. Погода (облака, осадки) — HTML-слой WindowWeather поверх, переплёт — RoomFront. */
+function Window({ phase, sky }: { phase: RoomPhase; sky: SkyCondition }) {
+  const overcast = isOvercast(sky)
+  const [top, bottom] = overcast ? SKY_GRADIENT[phase].overcast : SKY_GRADIENT[phase].clear
+  // id постоянный: при смене фазы/погоды меняются только stop-color — и плавно перетекают (transition 3 с)
+  const gradientId = `sky-${useId().replace(/:/g, '')}`
+  const lit = lampOn(phase)
   return (
     <g>
+      <defs>
+        <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" style={{ stopColor: top, transition: `stop-color ${TRANSITION}` }} />
+          <stop offset="1" style={{ stopColor: bottom, transition: `stop-color ${TRANSITION}` }} />
+        </linearGradient>
+      </defs>
       {/* Шторы */}
       <path d="M40,24 L62,24 L60,146 Q50,150 40,146 Z" fill={C.curtain} />
       <path d="M208,24 L230,24 L230,146 Q220,150 210,146 Z" fill={C.curtain} />
       <rect x={36} y={20} width={198} height={5} rx={2} fill={C.frame} />
 
       <rect x={60} y={30} width={150} height={112} rx={4} fill={C.frame} />
-      <rect x={66} y={36} width={138} height={100} fill={sky} />
+      <rect x={66} y={36} width={138} height={100} fill={`url(#${gradientId})`} />
 
-      {isNight ? (
-        <g>
-          {/* Луна-полумесяц и мерцающие звёзды */}
-          <circle cx={174} cy={60} r={11} fill={C.moon} />
-          <circle cx={180} cy={56} r={10} fill={sky} />
-          {[
-            [86, 50, 0], [120, 44, 1.2], [148, 70, 0.6], [96, 78, 2], [192, 88, 1.6],
-          ].map(([x, y, delay]) => (
-            <circle key={`${x}-${y}`} cx={x} cy={y} r={1.2} fill="#FFFFFF" className="motion-safe:animate-twinkle" style={{ animationDelay: `${delay}s` }} />
-          ))}
-        </g>
-      ) : (
-        <g>
-          <circle cx={96} cy={62} r={12} fill={C.warm} />
-          <ellipse cx={156} cy={58} rx={18} ry={6} fill="#FFFFFF" opacity={0.18} />
-          <ellipse cx={170} cy={54} rx={10} ry={5} fill="#FFFFFF" opacity={0.18} />
-        </g>
-      )}
+      {/* Светила всех фаз смонтированы, видна только текущая (и только когда небо не затянуто) */}
+      {(['morning', 'day', 'evening', 'night'] as const).map((p) => (
+        <Celestial key={p} phase={p} visible={!overcast && p === phase} />
+      ))}
 
-      {/* Силуэт города; ночью — светящиеся окна */}
-      <path d="M66,136 L66,112 L80,112 L80,100 L96,100 L96,118 L108,118 L108,94 L124,94 L124,110 L140,110 L140,102 L158,102 L158,120 L172,120 L172,96 L188,96 L188,114 L204,114 L204,136 Z" fill={isNight ? SKYLINE.night : SKYLINE.day} />
-      {isNight &&
-        [
+      {/* Силуэт города; вечером и ночью — светящиеся окна */}
+      <path
+        d="M66,136 L66,112 L80,112 L80,100 L96,100 L96,118 L108,118 L108,94 L124,94 L124,110 L140,110 L140,102 L158,102 L158,120 L172,120 L172,96 L188,96 L188,114 L204,114 L204,136 Z"
+        style={{ fill: SKYLINE_COLOR[phase], transition: `fill ${TRANSITION}` }}
+      />
+      <g style={fade(lit ? 0.75 : 0)}>
+        {[
           [84, 106], [112, 100], [116, 108], [146, 108], [176, 102], [180, 110], [194, 120],
-        ].map(([x, y]) => <rect key={`${x}-${y}`} x={x} y={y} width={2.5} height={3} fill={C.warm} opacity={0.75} />)}
-
-      {/* Переплёт и подоконник */}
-      <line x1={135} y1={36} x2={135} y2={136} stroke={C.frame} strokeWidth={4} />
-      <line x1={66} y1={86} x2={204} y2={86} stroke={C.frame} strokeWidth={4} />
-      <rect x={52} y={140} width={166} height={8} rx={2} fill="#2F3540" />
+        ].map(([x, y]) => <rect key={`${x}-${y}`} x={x} y={y} width={2.5} height={3} fill={C.warm} />)}
+      </g>
     </g>
   )
 }
+
+/** Солнце по фазе (утром низко слева, днём высоко, вечером садится за город), ночью — полумесяц и звёзды. */
+function Celestial({ phase, visible }: { phase: RoomPhase; visible: boolean }) {
+  if (phase === 'night') {
+    return (
+      <g style={fade(visible ? 1 : 0)}>
+        <circle cx={174} cy={60} r={11} fill={C.moon} />
+        <circle cx={180} cy={56} r={10} fill={SKY_GRADIENT.night.clear[0]} />
+        {[
+          [86, 50, 0], [120, 44, 1.2], [148, 70, 0.6], [96, 78, 2], [192, 88, 1.6],
+        ].map(([x, y, delay]) => (
+          <circle key={`${x}-${y}`} cx={x} cy={y} r={1.2} fill="#FFFFFF" className={visible ? 'motion-safe:animate-twinkle' : ''} style={{ animationDelay: `${delay}s` }} />
+        ))}
+      </g>
+    )
+  }
+  const sun = { morning: { cx: 92, cy: 98, r: 11, fill: '#FFD08A' }, day: { cx: 96, cy: 60, r: 12, fill: C.warm }, evening: { cx: 182, cy: 112, r: 14, fill: '#FF9A5A' } }[phase]
+  return (
+    <g style={fade(visible ? 1 : 0)}>
+      <circle cx={sun.cx} cy={sun.cy} r={sun.r + 6} fill={sun.fill} opacity={0.18} />
+      <circle {...sun} />
+    </g>
+  )
+}
+
+/**
+ * Передний план окна — поверх слоя погоды (облака и осадки идут «за стеклом»): переплёт и подоконник.
+ * Статичный SVG того же размера, что и комната.
+ */
+export const RoomFront = memo(function RoomFront({ layout }: { layout: RoomLayout }) {
+  return (
+    <svg viewBox={`0 0 ${layout.width} ${layout.height}`} width={layout.width} height={layout.height} className="pointer-events-none absolute inset-0" aria-hidden>
+      <g transform={`translate(0 ${layout.verticalShift})`}>
+        <line x1={135} y1={36} x2={135} y2={136} stroke={C.frame} strokeWidth={4} />
+        <line x1={66} y1={86} x2={204} y2={86} stroke={C.frame} strokeWidth={4} />
+        <rect x={52} y={140} width={166} height={8} rx={2} fill="#2F3540" />
+      </g>
+    </svg>
+  )
+})
 
 /** Полка: горшок с растением, книги; место для кота и кружки (кружка — отдельный анимируемый слой). */
 function Shelf() {

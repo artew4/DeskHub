@@ -1,9 +1,12 @@
 import { Heart } from 'lucide-react'
-import { memo, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { memo, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useDashboardStore } from '../../store/useDashboardStore'
 import { useClock } from '../clock/useClock'
 import { Cat } from './Cat'
-import { STATE_LABELS, roomLayout, type RoomLayout } from './catStates'
-import { Room } from './Room'
+import { STATE_LABELS, roomLayout, type CatReactionKind, type RoomLayout } from './catStates'
+import { Room, RoomFront } from './Room'
+import { RoomLighting, WindowWeather } from './RoomAtmosphere'
+import { hasPrecipitation, roomPhase, skyFromWeatherIcon } from './roomEnvironment'
 import { YARN_RADIUS, useCatBrain, type YarnState } from './useCatBrain'
 
 const CAT_NAME = 'Мурзик'
@@ -47,37 +50,83 @@ export const TamagotchiWidget = memo(function TamagotchiWidget() {
 
 function CatRoom({ width, height }: { width: number; height: number }) {
   const hour = useClock('minute').getHours()
-  const isNight = hour < 7 || hour >= 20
+  // Реальный мир за окном: фаза суток комнаты и погода из стора (wttr.in → WeatherModel.icon)
+  const phase = roomPhase(hour)
+  const sky = skyFromWeatherIcon(useDashboardStore((s) => s.weather?.icon))
+  const precipitation = hasPrecipitation(sky)
+  const env = useMemo(() => ({ phase, precipitation }), [phase, precipitation])
   const layout = useMemo(() => roomLayout(width, height), [width, height])
-  const { frame, mugOnShelf, yarn, pokedAt, poke } = useCatBrain(isNight, layout)
+  const { frame, mugOnShelf, yarn, reaction, poke, startle } = useCatBrain(env, layout)
+
+  // Испуг: экран резко включили ночью (sleep → dimmed — касание чёрного экрана). Пока экран спал,
+  // виджет скрыт (display: none), но смонтирован — «мозг» жив и реагирует мгновенно при включении.
+  const powerMode = useDashboardStore((s) => s.powerMode)
+  const prevPowerMode = useRef(powerMode)
+  useEffect(() => {
+    if (prevPowerMode.current === 'sleep' && powerMode === 'dimmed') startle()
+    prevPowerMode.current = powerMode
+  }, [powerMode, startle])
 
   const easing = frame.pose === 'run' ? 'linear' : WALK_EASING
   const catTransform = `translate3d(${frame.x - CAT_BOX.feetX}px, ${frame.y - CAT_BOX.feetY}px, 0)`
 
   return (
-    <div className="absolute inset-0" role="img" aria-label={`${CAT_NAME} ${STATE_LABELS[frame.state]}`}>
-      <Room isNight={isNight} layout={layout} />
+    // Вся карточка — зона касания (кот маленький, а пальцем по нему попасть трудно); свайп мини-карусели клик не порождает
+    <div className="absolute inset-0" role="button" aria-label={`${CAT_NAME} ${STATE_LABELS[frame.state]}. Коснитесь, чтобы погладить`} onClick={poke}>
+      <Room phase={phase} sky={sky} layout={layout} />
+      <WindowWeather phase={phase} sky={sky} layout={layout} />
+      <RoomFront layout={layout} />
 
       <Mug onShelf={mugOnShelf} layout={layout} />
       <Yarn yarn={yarn} />
+      {/* Освещение — поверх комнаты, кружки и клубка, но под котом: ночью комната тёмная, кот читается */}
+      <RoomLighting phase={phase} sky={sky} layout={layout} />
 
       <div
         className="absolute left-0 top-0 will-change-transform"
         style={{ transform: catTransform, transition: `transform ${frame.moveMs}ms ${easing}` }}
       >
-        <button type="button" onClick={poke} className="block cursor-none rounded-full outline-none" aria-label={`Погладить: ${CAT_NAME}`}>
-          <Cat pose={frame.pose} facing={frame.facing} />
-        </button>
-        {pokedAt && (
-          <Heart
-            key={pokedAt}
-            className="pointer-events-none absolute left-1/2 top-0 size-5 -translate-x-1/2 fill-status-bad text-status-bad motion-safe:animate-cat-heart"
-            aria-hidden
-          />
-        )}
+        <Cat pose={frame.pose} facing={frame.facing} glow={phase === 'night'} />
+        {reaction && <ReactionBubble key={reaction.at} kind={reaction.kind} />}
       </div>
 
     </div>
+  )
+}
+
+/** Всплывающая реакция над котом: сердечки, значок раздражения или «!» испуга. */
+function ReactionBubble({ kind }: { kind: CatReactionKind }) {
+  if (kind === 'hearts') {
+    // Три сердечка веером, с задержкой — «пыхнули» от кота
+    return (
+      <>
+        {[
+          { x: -16, delay: 0, size: 'size-4' },
+          { x: 0, delay: 0.15, size: 'size-5' },
+          { x: 16, delay: 0.3, size: 'size-4' },
+        ].map(({ x, delay, size }) => (
+          <Heart
+            key={x}
+            className={`pointer-events-none absolute left-1/2 top-0 ${size} fill-status-bad text-status-bad opacity-0 motion-safe:animate-cat-heart`}
+            style={{ marginLeft: x, animationDelay: `${delay}s` }}
+            aria-hidden
+          />
+        ))}
+      </>
+    )
+  }
+  if (kind === 'grumpy') {
+    // «Вена раздражения» — как в аниме: недоволен, что разбудили
+    return (
+      <svg width={20} height={20} viewBox="-10 -10 20 20" className="pointer-events-none absolute right-2 top-0 motion-safe:animate-cat-pop" aria-hidden>
+        <path d="M-7,-2 Q-2,-2 -2,-7 M2,-7 Q2,-2 7,-2 M7,2 Q2,2 2,7 M-2,7 Q-2,2 -7,2" fill="none" stroke="#EF4444" strokeWidth={2.6} strokeLinecap="round" />
+      </svg>
+    )
+  }
+  return (
+    <span className="pointer-events-none absolute left-1/2 -top-3 -translate-x-1/2 text-2xl font-black leading-none text-status-warn motion-safe:animate-cat-pop" aria-hidden>
+      !
+    </span>
   )
 }
 

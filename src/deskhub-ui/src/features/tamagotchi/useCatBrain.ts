@@ -2,13 +2,17 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   initialFrame,
   pickNextState,
+  planReaction,
   planState,
+  reactionForTap,
   type CatFrame,
+  type CatReactionKind,
   type CatState,
   type CatStep,
   type Point,
   type RoomLayout,
 } from './catStates'
+import type { RoomPhase } from './roomEnvironment'
 
 /** Клубок: позиция и накопленный угол вращения (катится без проскальзывания). */
 export interface YarnState extends Point {
@@ -21,9 +25,12 @@ export interface CatBrain {
   frame: CatFrame
   mugOnShelf: boolean
   yarn: YarnState
-  /** Метка последнего тапа по коту — для реакции (сердечко) */
-  pokedAt: number | null
+  /** Последняя реакция на человека (для всплывающих сердечек / «!» / значка раздражения); at — ключ анимации */
+  reaction: { kind: CatReactionKind; at: number } | null
+  /** Тап по коту */
   poke: () => void
+  /** Экран включили ночью (powerMode sleep → dimmed): испуг */
+  startle: () => void
 }
 
 /** Первый сон после появления виджета — короткий, чтобы кот вскоре «ожил». */
@@ -34,27 +41,32 @@ const FIRST_NAP_MS = 15_000
  * выбирает следующее состояние (pickNextState) и планирует его (planState).
  * React-состояние меняется только на границах шагов (раз в 0.35–180 с), не каждый кадр.
  */
-export function useCatBrain(isNight: boolean, layout: RoomLayout): CatBrain {
+/** Внешний мир кота: фаза суток и осадки за окном (меняют веса выбора занятий). */
+export interface CatEnvironment {
+  phase: RoomPhase
+  precipitation: boolean
+}
+
+export function useCatBrain(env: CatEnvironment, layout: RoomLayout): CatBrain {
   const [frame, setFrame] = useState<CatFrame>(() => initialFrame(layout))
   const [mugOnShelf, setMugOnShelf] = useState(true)
   const [yarn, setYarn] = useState<YarnState>(() => ({ ...layout.anchors.yarnHome, angle: 0 }))
-  const [pokedAt, setPokedAt] = useState<number | null>(null)
+  const [reaction, setReaction] = useState<CatBrain['reaction']>(null)
 
   // Рефы — актуальные значения для планировщика внутри таймеров
   const frameRef = useRef(frame)
   const mugRef = useRef(true)
   const yarnRef = useRef(yarn)
-  const nightRef = useRef(isNight)
+  const envRef = useRef(env)
   const layoutRef = useRef(layout)
   const history = useRef<CatState[]>(['SLEEPING_RUG'])
   const queue = useRef<CatStep[]>([])
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
-  const justWoken = useRef(false)
 
   useEffect(() => {
-    nightRef.current = isNight
+    envRef.current = env
     layoutRef.current = layout
-  }, [isNight, layout])
+  }, [env, layout])
 
   /** Запуск следующего шага; присваивается в эффекте ниже (нужен poke для пробуждения). */
   const runNextStep = useRef<() => void>(() => {})
@@ -65,10 +77,9 @@ export function useCatBrain(isNight: boolean, layout: RoomLayout): CatBrain {
         const next = pickNextState({
           history: history.current,
           mugOnShelf: mugRef.current,
-          isNight: nightRef.current,
-          justWoken: justWoken.current,
+          phase: envRef.current.phase,
+          precipitation: envRef.current.precipitation,
         })
-        justWoken.current = false
         history.current = [...history.current.slice(-5), next]
         queue.current = planState(next, frameRef.current, layoutRef.current, { yarn: yarnRef.current })
       }
@@ -93,16 +104,23 @@ export function useCatBrain(isNight: boolean, layout: RoomLayout): CatBrain {
     return () => clearTimeout(timer.current)
   }, [])
 
-  /** Тап по коту: сердечко; спящий кот просыпается и потягивается. */
-  const poke = useCallback(() => {
-    setPokedAt(Date.now())
-    if (frameRef.current.pose === 'sleep') {
-      clearTimeout(timer.current)
-      queue.current = []
-      justWoken.current = true
-      timer.current = setTimeout(() => runNextStep.current(), 700)
-    }
+  /** Прервать текущий план и сразу начать шаги реакции. */
+  const react = useCallback((kind: CatReactionKind) => {
+    setReaction({ kind, at: Date.now() })
+    const steps = planReaction(kind, frameRef.current, layoutRef.current, { yarn: yarnRef.current })
+    if (!steps) return // кот и так активен — только всплывающая реакция
+    clearTimeout(timer.current)
+    const next = steps.at(-1)!.frame.state
+    history.current = [...history.current.slice(-5), next]
+    queue.current = steps
+    runNextStep.current()
   }, [])
 
-  return { frame, mugOnShelf, yarn, pokedAt, poke }
+  /** Тап: спящий — недовольно просыпается и потягивается; бодрствующий — сердечки (и, может, игра с клубком). */
+  const poke = useCallback(() => react(reactionForTap(frameRef.current)), [react])
+
+  /** Внезапно включили свет (экран вышел из ночного Sleep): испуг. */
+  const startle = useCallback(() => react('startle'), [react])
+
+  return { frame, mugOnShelf, yarn, reaction, poke, startle }
 }
