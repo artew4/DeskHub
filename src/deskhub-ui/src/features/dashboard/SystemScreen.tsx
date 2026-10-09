@@ -16,7 +16,7 @@ export function SystemScreen() {
           <ChevronsRight className="size-4" aria-hidden />
         </span>
       </header>
-      <div style={{ gridColumn: '1 / span 5', gridRow: '2 / span 3' }}>
+      <div style={{ gridColumn: '1 / span 5', gridRow: '2 / span 5' }}>
         <WidgetBoundary name="telemetry">
           <TelemetryWidget />
         </WidgetBoundary>

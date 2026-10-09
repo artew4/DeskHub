@@ -58,7 +58,7 @@
 | `CalendarUpdated` | `CalendarWorker` | `setCalendar` | 15 мин |
 | `PowerModeChanged` | `PowerModeService` | `setPowerMode` | при смене режима (00:00, 01:30, 08:00, пробуждение) |
 
-Клиент → сервер (методы хаба): `ReportTrafficVisible` (пинг раз в 90 с, пока виден виджет пробок) и `ForceTrafficRefresh` (данные старше 15 мин) — «спящий режим» `TrafficWorker`; `WakeScreen` — касание чёрного экрана ночью (режим питания).
+Клиент → сервер (методы хаба): `ReportTrafficVisible` (пинг раз в 90 с, пока виден виджет пробок) и `ForceTrafficRefresh` (данные старше 15 мин) — «спящий режим» `TrafficWorker`; `WakeScreen` — касание чёрного экрана, `SetSleepMode` — кнопка «В режим сна» (режим питания).
 | `SettingsChanged` | API настроек | `ui.applySettings` | по событию |
 
 Любое изменение контракта (DTO, имя события, эндпоинт) **обязательно** отражается в документации обоих слоёв: `Frontend_react/Feature_Widgets.md` и `Backend_dotnet/Core_Architecture.md`.

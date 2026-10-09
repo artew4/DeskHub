@@ -7,7 +7,7 @@ namespace DeskHub.Api.Hubs;
 
 /// <summary>
 /// Хаб /hubs/dashboard. Данные идут сервер → клиент через <see cref="DashboardNotifier"/> (IHubContext).
-/// Клиент вызывает только служебные методы: видимость пробок («спящий режим» TrafficWorker) и WakeScreen (ночной режим экрана).
+/// Клиент вызывает только служебные методы: видимость пробок («спящий режим» TrafficWorker), WakeScreen и SetSleepMode (режим экрана).
 /// </summary>
 public sealed class DashboardHub(ILogger<DashboardHub> logger, TrafficActivityTracker trafficActivity, PowerModeService power) : Hub
 {
@@ -31,4 +31,7 @@ public sealed class DashboardHub(ILogger<DashboardHub> logger, TrafficActivityTr
 
     /// <summary>Касание чёрного экрана ночью: Sleep → Dimmed на 5 минут, затем снова Sleep.</summary>
     public PowerModeModel WakeScreen() => power.WakeTemporarily();
+
+    /// <summary>Кнопка «В режим сна»: экран гаснет сразу (Sleep) до касания или до утра.</summary>
+    public PowerModeModel SetSleepMode() => power.SleepNow();
 }

@@ -10,6 +10,7 @@ import {
   temperatureLevel,
   type StatusLevel,
 } from './telemetry.mappers'
+import { DisplayControls } from './DisplayControls'
 
 export const TelemetryWidget = memo(function TelemetryWidget() {
   const telemetry = useDashboardStore((s) => s.telemetry)
@@ -19,7 +20,13 @@ export const TelemetryWidget = memo(function TelemetryWidget() {
     <section className="relative flex h-full flex-col overflow-hidden rounded-card bg-surface-1 p-4">
       <header className="mb-3 flex items-center justify-between">
         <h2 className="text-label font-semibold uppercase text-fg-secondary">Система</h2>
-        {telemetry && (
+        {/* Низ карточки занят блоком управления — статус связи в шапке вместо аптайма */}
+        {!isConnected && telemetry ? (
+          <span className="flex items-center gap-1 text-label text-status-warn">
+            <WifiOff className="size-4" aria-hidden />
+            нет связи
+          </span>
+        ) : telemetry && (
           <span className="flex items-center gap-1.5 text-label tabular-nums text-fg-secondary">
             <Clock className="size-4" aria-hidden />
             {formatUptime(telemetry.uptimeSeconds)}
@@ -51,12 +58,8 @@ export const TelemetryWidget = memo(function TelemetryWidget() {
         <div className="flex flex-1 items-center justify-center text-label text-fg-muted">Ожидание данных…</div>
       )}
 
-      {!isConnected && telemetry && (
-        <span className="absolute bottom-3 right-4 flex items-center gap-1 text-label text-status-warn">
-          <WifiOff className="size-4" aria-hidden />
-          нет связи
-        </span>
-      )}
+      {/* Яркость и сон — работают и без телеметрии/связи */}
+      <DisplayControls />
     </section>
   )
 })

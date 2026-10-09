@@ -1,6 +1,6 @@
 import { HttpTransportType, HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr'
 import { useDashboardStore, type ConnectionStatus } from '../store/useDashboardStore'
-import type { CalendarModel, DashboardSnapshot, PowerModeModel, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
+import type { CalendarModel, DashboardSnapshot, PowerMode, PowerModeModel, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
 
 // Имена событий — зеркало src/DeskHub.Api/Hubs/HubEvents.cs
 export const HubEvents = {
@@ -101,6 +101,7 @@ export const HubMethods = {
   ReportTrafficVisible: 'ReportTrafficVisible',
   ForceTrafficRefresh: 'ForceTrafficRefresh',
   WakeScreen: 'WakeScreen',
+  SetSleepMode: 'SetSleepMode',
 } as const
 
 /** Вызов без ожидания результата; без связи — тихо пропускается (после реконнекта эффект видимости повторит пинг). */
@@ -115,8 +116,24 @@ export const reportTrafficVisible = (): void => invokeIfConnected(HubMethods.Rep
 /** Данные пробок устарели — попросить сервер обновить сейчас (сервер ограничивает частоту). */
 export const forceTrafficRefresh = (): void => invokeIfConnected(HubMethods.ForceTrafficRefresh)
 
-/** Касание чёрного экрана ночью: сервер переводит Sleep → Dimmed на 5 минут (PowerModeChanged придёт следом). */
-export const wakeScreen = (): void => invokeIfConnected(HubMethods.WakeScreen)
+/**
+ * Смена режима питания по запросу клиента: сразу ставим ожидаемый режим локально (экран реагирует мгновенно и без связи),
+ * затем применяем ответ сервера — итоговый режим с учётом расписания (тот же, что придёт в PowerModeChanged).
+ */
+function invokePower(method: string, optimistic: PowerMode): void {
+  store().setPowerMode(optimistic)
+  if (connection.state !== HubConnectionState.Connected) return
+  connection
+    .invoke<PowerModeModel>(method)
+    .then((power) => store().setPowerMode(power.mode))
+    .catch((error: unknown) => console.warn(`[signalr] ${method} failed`, error))
+}
+
+/** Касание чёрного экрана: ночью Sleep → Dimmed на 5 минут, после кнопки «В режим сна» днём — сразу Normal. */
+export const wakeScreen = (): void => invokePower(HubMethods.WakeScreen, 'dimmed')
+
+/** Кнопка «В режим сна»: экран гаснет сразу и спит до касания (или до утра). */
+export const setSleepMode = (): void => invokePower(HubMethods.SetSleepMode, 'sleep')
 
 let started = false
 

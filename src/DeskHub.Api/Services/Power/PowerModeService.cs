@@ -12,6 +12,8 @@ namespace DeskHub.Api.Services.Power;
 /// - Для уведомления клиентов (PowerModeChanged) один таймер TimeProvider взводится ровно на ближайшую смену режима:
 ///   границу расписания (00:00, 01:30, 08:00) или конец временного пробуждения. Без опроса.
 /// - WakeScreen() в режиме Sleep: <c>_wakeUntil = now + 5 мин</c> → Dimmed сразу; таймер срабатывает в <c>_wakeUntil</c> → снова Sleep.
+/// - SetSleepMode() (кнопка «В режим сна»): принудительный Sleep в любое время — <c>_forcedSleepUntil</c> = ближайшее утро
+///   (NormalFrom), временное пробуждение сбрасывается. Снимается касанием (WakeScreen) или утром по таймеру.
 /// </summary>
 public sealed class PowerModeService(
     TimeProvider time,
@@ -25,6 +27,7 @@ public sealed class PowerModeService(
     private readonly Lock _lock = new();
     private ITimer? _timer;
     private DateTimeOffset? _wakeUntil;
+    private DateTimeOffset? _forcedSleepUntil;
     private PowerMode? _published;
 
     public PowerMode Current
@@ -42,17 +45,41 @@ public sealed class PowerModeService(
         return PowerMode.Normal;
     }
 
-    /// <summary>Временное пробуждение (метод хаба WakeScreen): только из Sleep, на WakeMinutes минут.</summary>
+    /// <summary>
+    /// Временное пробуждение (метод хаба WakeScreen). Принудительный сон снимается полностью — дальше режим по расписанию;
+    /// в ночном Sleep по расписанию экран включается затемнённым на WakeMinutes минут.
+    /// </summary>
     public PowerModeModel WakeTemporarily()
     {
         lock (_lock)
         {
             var now = time.GetUtcNow();
+            if (_forcedSleepUntil > now)
+            {
+                _forcedSleepUntil = null;
+                logger.LogInformation("Manual sleep cancelled by touch");
+            }
             if (Scheduled(now) == PowerMode.Sleep && !(_wakeUntil > now))
             {
                 _wakeUntil = now.AddMinutes(_settings.WakeMinutes);
                 logger.LogInformation("Screen woken until {Until:HH:mm:ss} UTC", _wakeUntil);
             }
+            return PublishAndRearm(now);
+        }
+    }
+
+    /// <summary>
+    /// Принудительный сон (метод хаба SetSleepMode): Sleep сразу, до касания или до утра (NormalFrom).
+    /// Активное временное пробуждение сбрасывается; клиентам уходит PowerModeChanged.
+    /// </summary>
+    public PowerModeModel SleepNow()
+    {
+        lock (_lock)
+        {
+            var now = time.GetUtcNow();
+            _wakeUntil = null;
+            _forcedSleepUntil = NextOccurrence(now, _settings.NormalFrom);
+            logger.LogInformation("Manual sleep until {Until:yyyy-MM-dd HH:mm zzz} (or next touch)", _forcedSleepUntil);
             return PublishAndRearm(now);
         }
     }
@@ -81,6 +108,7 @@ public sealed class PowerModeService(
 
     private PowerMode Compute(DateTimeOffset now)
     {
+        if (_forcedSleepUntil > now) return PowerMode.Sleep;
         var scheduled = Scheduled(now);
         return scheduled == PowerMode.Sleep && _wakeUntil > now ? PowerMode.Dimmed : scheduled;
     }
@@ -89,6 +117,7 @@ public sealed class PowerModeService(
     private PowerModeModel PublishAndRearm(DateTimeOffset now)
     {
         if (_wakeUntil <= now) _wakeUntil = null; // пробуждение закончилось
+        if (_forcedSleepUntil <= now) _forcedSleepUntil = null; // наступило утро — принудительный сон снят
         var mode = Compute(now);
         var model = new PowerModeModel(mode, mode == PowerMode.Dimmed && Scheduled(now) == PowerMode.Sleep ? _wakeUntil : null, now);
 
@@ -109,17 +138,21 @@ public sealed class PowerModeService(
     /// <summary>Ближайший момент, когда режим может смениться: граница расписания или конец пробуждения.</summary>
     private DateTimeOffset NextChange(DateTimeOffset now)
     {
-        var local = TimeZoneInfo.ConvertTime(now, _tz);
         var candidates = new[] { _settings.DimFrom, _settings.SleepFrom, _settings.NormalFrom }
-            .Select(b =>
-            {
-                var wall = local.Date + b;
-                if (wall <= local.DateTime) wall = wall.AddDays(1);
-                return new DateTimeOffset(wall, _tz.GetUtcOffset(wall));
-            })
+            .Select(b => NextOccurrence(now, b))
             .ToList();
         if (_wakeUntil is { } until && until > now) candidates.Add(until);
+        if (_forcedSleepUntil is { } forced && forced > now) candidates.Add(forced);
         return candidates.Min();
+    }
+
+    /// <summary>Ближайшее (строго после now) наступление времени суток b по часовому поясу расписания.</summary>
+    private DateTimeOffset NextOccurrence(DateTimeOffset now, TimeSpan b)
+    {
+        var local = TimeZoneInfo.ConvertTime(now, _tz);
+        var wall = local.Date + b;
+        if (wall <= local.DateTime) wall = wall.AddDays(1);
+        return new DateTimeOffset(wall, _tz.GetUtcOffset(wall));
     }
 
     /// <summary>t ∈ [from; to) с учётом перехода через полночь.</summary>

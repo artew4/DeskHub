@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { BrightnessOverlay } from './components/BrightnessOverlay'
 import { PowerOverlay } from './components/PowerOverlay'
 import { ScreenCarousel } from './components/ScreenCarousel'
 import { MainScreen } from './features/dashboard/MainScreen'
@@ -27,6 +28,7 @@ function App() {
           <SystemScreen />
         </ScreenCarousel>
       </div>
+      <BrightnessOverlay />
       <PowerOverlay />
     </div>
   )

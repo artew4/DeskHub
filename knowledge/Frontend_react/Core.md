@@ -55,14 +55,15 @@ src/deskhub-ui/
 |---|---|---|
 | `src/types/dashboard.ts` | TS-зеркало C#-моделей (`WeatherModel`, `TrafficModel`, `TelemetryModel`, `DashboardSnapshot`) | `shared/api/types.ts` |
 | `src/store/useDashboardStore.ts` | Единый Zustand-стор: `weather`, `traffic`, `telemetry`, `calendar`, `connectionStatus`, `isConnected`, `activeScreenIndex` + экшены `setWeather/setTraffic/setTelemetry/applySnapshot/setConnectionStatus`, навигация `setScreen/nextScreen/prevScreen/registerActivity` и таймер автовозврата (30 с) | `shared/store/` + слайсы фич |
-| `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, `HubMethods` + `reportTrafficVisible()` / `forceTrafficRefresh()` (вызовы хаба без ожидания, только при связи), бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
+| `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, `HubMethods` + `reportTrafficVisible()` / `forceTrafficRefresh()` (вызовы хаба без ожидания, только при связи), `wakeScreen()` / `setSleepMode()` (режим питания: оптимистично в стор, затем ответ сервера), бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
 | `src/App.tsx` | Корень 1024×600 (без отступа — `p-4` внутри экранов), `ScreenCarousel` с `MainScreen` + `SystemScreen`; вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
 | `src/theme/useTimeTheme.ts` | Тема по времени суток: класс `theme-morning/day/evening/night` на `<html>` (`Feature_Dashboard.md`, 10.1) | на месте |
+| `src/components/BrightnessOverlay.tsx` + `src/store/useBrightnessStore.ts` | Программная яркость 10–100 % (localStorage `deskhub.brightness`): чёрный слой `z-[998]` с `opacity = 1 − яркость` (`Feature_Dashboard.md`, 10.3) | на месте |
 | `src/components/PowerOverlay.tsx` | Слой `z-[999]` по режиму питания: `dimmed` — `bg-black/50`, `sleep` — чёрный экран, касание → `WakeScreen` (10.2) | на месте |
 | `src/components/WidgetBoundary.tsx` | Error boundary вокруг каждого виджета (главный и системный экраны, оба слоя мини-карусели): ошибка рендера показывает в ячейке заглушку «Виджет временно недоступен», остальной дашборд работает; повторная попытка через 30 с | `shared/ui/` |
 | `src/components/ScreenCarousel.tsx` | Карусель экранов: CSS `translate3d` + Pointer Events, свайп за пальцем через ref, порог 100 px, индикатор экранов (`Feature_Dashboard.md`, 8.2) | `app/` |
 | `src/features/dashboard/MainScreen.tsx` | Главный экран, сетка 12×6 (`gap-3 p-4`): часы (кол. 1–7, стр. 1–3), мини-карусель «пробки ↔ кот» (кол. 1–7, стр. 4–6), погода (кол. 8–12, стр. 1–3), календарь (кол. 8–12, стр. 4–6) | на месте |
-| `src/features/dashboard/SystemScreen.tsx` | Системный экран: заголовок «Система» + подсказка, телеметрия (кол. 1–5, стр. 2–4) | на месте |
+| `src/features/dashboard/SystemScreen.tsx` | Системный экран: заголовок «Система» + подсказка, телеметрия с блоком управления экраном (кол. 1–5, стр. 2–6) | на месте |
 | `src/features/dashboard/BottomLeftCarousel.tsx` | Вертикальная мини-карусель «Пробки ↔ Кот» в левой нижней ячейке: дефолт по тайм-окну, свайп вверх/вниз, автовозврат 30 с; вертикальные жесты забирает у `ScreenCarousel` (`Feature_Dashboard.md`, 9.1) | на месте |
 | `src/features/tamagotchi/` | `TamagotchiWidget.tsx`, `Room.tsx`, `Cat.tsx`, `catStates.ts` (состояния, веса, планирование — чистые функции), `useCatBrain.ts` (цепочка `setTimeout`) — `Feature_Dashboard.md`, 9 | на месте |
 | `src/features/traffic/trafficWindow.ts`, `useTrafficWindow.ts` | Окно показа пробок: Пн–Пт 10:00–13:20 | на месте |
@@ -70,7 +71,7 @@ src/deskhub-ui/
 | `src/features/weather/` | `WeatherWidget.tsx`, `weather.mappers.ts` (температура с U+2212, УФ-шкала, фильтр часов), `weatherIcons.tsx` (ключ иконки → lucide) | на месте |
 | `src/features/clock/` | `ClockWidget.tsx`, `AnalogClock.tsx` (rAF + useRef, 60 FPS без ре-рендеров), `DigitalDate.tsx`, `clockMath.ts`, `useClock.ts` (время, выровненное по секунде/минуте; используется и погодой) | на месте |
 | `src/features/traffic/` | `TrafficWidget.tsx`, `RouteMap.tsx` (SVG-схема ТТК vs МКАД), `traffic.mappers.ts` (цвета загруженности, формат длительности, самый быстрый маршрут) | на месте |
-| `src/features/telemetry/` | `TelemetryWidget.tsx` (карточка) + `telemetry.mappers.ts` (пороги, форматирование аптайма) | на месте |
+| `src/features/telemetry/` | `TelemetryWidget.tsx` (карточка) + `DisplayControls.tsx` (слайдер яркости и кнопка «В режим сна») + `telemetry.mappers.ts` (пороги, форматирование аптайма) | на месте |
 
 Перенос в целевую структуру — при появлении первых фич-виджетов; одновременно стор разбивается на слайсы (раздел 3.2). Реализовано: бесконечный реконнект, ретраи первого `start()`, snapshot после (пере)подключения, повторная попытка по событию `online`, watchdog — `location.reload()`, если статус не `connected` 10 минут подряд (5.3; таймер ведёт `setStatus()` в `signalrConnection.ts`), защита от устаревших данных — экшены стора и `applySnapshot` отбрасывают данные со временем старше текущего (`updatedAt`, у телеметрии `timestamp`; для пробок — `updatedAt` объекта поездки).
 
