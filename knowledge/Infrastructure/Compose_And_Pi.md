@@ -64,6 +64,10 @@ services:
       Calendar__TimeZone: ${TZ:-Europe/Moscow}
       Telemetry__ProcRoot: /host/proc
       Telemetry__SysRoot: /host/sys
+    # Демон питания дисплея на хосте (HDMI off/on через wlr-randr, порт 5055): контейнер ходит к нему
+    # по host.docker.internal — knowledge/Infrastructure/Hardware_Display_Power.md
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - /proc:/host/proc:ro     # метрики хоста для TelemetryWorker
       - /sys:/host/sys:ro
@@ -104,6 +108,7 @@ volumes:
 | **`depends_on: service_healthy`** | `api` стартует после готовности сервиса `postgres`; ретраи миграций в коде — вторая линия защиты. |
 | **`env_file: .env` (required: false)** | Сервис `api` получает весь `.env` — так передаётся массив календарей `Calendar__Sources__N__*`, который неудобно перечислять в `environment`. Без `.env` запуск не падает. |
 | **`/proc`, `/sys` → `/host/*:ro`** | Явный read-only доступ к метрикам хоста для `TelemetryWorker`. Пути передаются через `Telemetry__ProcRoot/SysRoot`. |
+| **`extra_hosts: host.docker.internal:host-gateway`** | Имя хоста Pi внутри контейнера (на Linux Docker его сам не создаёт): бэкенд шлёт `POST /sleep` / `/wake` демону питания дисплея на `:5055` (`Hardware_Display_Power.md`). Без демона — только предупреждение в логе. |
 | **`TZ`** | Совпадает с таймзоной хоста — часы пик, ночной режим и retention считаются в локальном времени. |
 | **`restart: unless-stopped`** | Автоподъём после перезагрузки Pi и падений; не поднимает контейнер, остановленный вручную. |
 | **`logging` с ротацией** | Логи не забивают SD-карту (максимум 30 MB на сервис). |
@@ -186,68 +191,16 @@ curl -fsS http://localhost:5000/health   # → Healthy
 
 ### 4.1. `deploy/pi/kiosk.sh` (в репозитории; на Pi — `~/deskhub/kiosk.sh`)
 
-```bash
-#!/usr/bin/env bash
-# DeskHub Kiosk launcher: ждёт готовности API и держит Chromium запущенным.
-#
-# Установка на Raspberry Pi (один раз):
-#   scp deploy/pi/kiosk.sh pi@deskhub.local:~/deskhub/
-#   chmod +x ~/deskhub/kiosk.sh
-#   echo '"$HOME/deskhub/kiosk.sh" &' >> ~/.config/labwc/autostart
-# Подробности: knowledge/Infrastructure/Compose_And_Pi.md, раздел 4.
-#
-# После деплоя новой версии фронтенд перезагружается сам (новый InstanceId бэкенда) — перезапускать Chromium не нужно.
-set -u
+Скрипт хранится **только в репозитории** (`deploy/pi/kiosk.sh`) — это единственный источник истины, копия здесь не дублируется. Что он делает:
 
-URL="http://localhost:5000"
-HEALTH_URL="$URL/health"
-WAIT_TIMEOUT_SEC=300          # сколько ждать API при холодном старте
-LOG="$HOME/.cache/deskhub-kiosk.log"
+1. Ждёт готовности API: опрашивает `http://localhost:5000/health` каждые 2 с, до 300 с (раздел 4.3).
+2. В бесконечном цикле `while true` перед **каждым** запуском Chromium:
+   - пишет в лог состояние памяти (`free -h`);
+   - удаляет и заново создаёт профиль `/dev/shm/chromium-kiosk` (раздел 4.5);
+   - запускает Chromium с профилем в RAM (`--user-data-dir`) и флагами киоска (раздел 4.2).
+3. Chromium упал или закрыт → запись «Chromium exited with code N», пауза 5 с, повторное ожидание `/health` (если упал вместе с API) и новый круг.
 
-mkdir -p "$(dirname "$LOG")"
-log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
-
-# Chromium в Bookworm называется chromium-browser, в более новых сборках — chromium
-CHROMIUM="$(command -v chromium-browser || command -v chromium)"
-[ -z "$CHROMIUM" ] && { log "Chromium not found"; exit 1; }
-
-wait_for_api() {
-  local waited=0
-  until curl -fsS --max-time 2 "$HEALTH_URL" > /dev/null 2>&1; do
-    if (( waited >= WAIT_TIMEOUT_SEC )); then
-      log "API not ready after ${WAIT_TIMEOUT_SEC}s, starting Chromium anyway"
-      return 1
-    fi
-    sleep 2; waited=$((waited + 2))
-  done
-  log "API ready after ${waited}s"
-}
-
-wait_for_api
-
-# Перезапуск Chromium, если он упал или был закрыт
-while true; do
-  log "Starting Chromium"
-  "$CHROMIUM" \
-    --kiosk \
-    --incognito \
-    --app="$URL" \
-    --ozone-platform=wayland \
-    --noerrdialogs \
-    --disable-infobars \
-    --disable-session-crashed-bubble \
-    --disable-features=TranslateUI \
-    --disable-pinch \
-    --overscroll-history-navigation=0 \
-    --password-store=basic \
-    --no-first-run \
-    --check-for-update-interval=31536000 \
-    >> "$LOG" 2>&1
-  log "Chromium exited with code $?, restarting in 5s"
-  sleep 5
-  wait_for_api      # если упал вместе с API — снова дождаться готовности
-done
-```
+Лог — `~/.cache/deskhub-kiosk.log`.
 
 ```bash
 scp deploy/pi/kiosk.sh pi@deskhub.local:~/deskhub/   # с Mac
@@ -259,10 +212,11 @@ chmod +x ~/deskhub/kiosk.sh                          # на Pi
 | Флаг | Назначение |
 |---|---|
 | `--kiosk` | Полный экран без UI браузера, выйти нельзя обычными средствами |
-| `--incognito` | Чистый профиль при каждом старте: нет диалога «восстановить вкладки», нет накопления кэша. Следствие — нет persistent `localStorage` (настройки хранятся на бэкенде). |
+| `--user-data-dir=/dev/shm/chromium-kiosk` | Профиль в RAM, пересоздаётся перед каждым запуском (раздел 4.5). Заменил `--incognito`: чистый старт без диалога «восстановить вкладки» и без накопления кэша сохраняется. `localStorage` (например, яркость экрана) переживает перезагрузку страницы и деплой (InstanceId-reload), но **не перезапуск Chromium** — всё важное хранится на бэкенде. |
 | `--app=http://localhost:5000` | Открыть приложение как отдельное окно-приложение |
 | `--ozone-platform=wayland` | Нативный Wayland-бэкенд под labwc |
 | `--noerrdialogs`, `--disable-infobars`, `--disable-session-crashed-bubble` | Никаких всплывающих панелей и диалогов поверх UI |
+| `--disable-crash-reporter` | Не собирать и не отправлять краш-дампы: не тратит CPU/RAM/диск после падения, перезапуск быстрее |
 | `--disable-pinch`, `--overscroll-history-navigation=0` | Запрет зума щипком и свайпа «назад» |
 | `--password-store=basic` | Не вызывать диалог разблокировки системного keyring |
 | `--no-first-run`, `--check-for-update-interval=…` | Без мастера первого запуска и проверок обновлений |
@@ -286,6 +240,29 @@ EOF
 - Альтернатива — systemd user unit (`~/.config/systemd/user/deskhub-kiosk.service`, `WantedBy=graphical-session.target`, `Restart=always`). Выбран autostart labwc как более простой вариант; при переходе на systemd этот раздел обновляется.
 
 ---
+
+
+### 4.5. Надёжность киоска: профиль в RAM и журнал памяти
+
+**Проблема.** При аварийном завершении (OOM, падение GPU-процесса, выключение питания) Chromium оставляет в профиле `SingletonLock` / `SingletonSocket` / `SingletonCookie`. Следующий запуск с тем же профилем видит «чужой» lock и не стартует или открывает пустое окно — киоск остаётся без дашборда до ручного вмешательства. Кроме того, круглосуточная работа 24/7 может давать утечки памяти, и без истории не понять, почему браузер упал.
+
+**Решение в `kiosk.sh`:**
+- **Профиль в RAM-диске** — `PROFILE_DIR=/dev/shm/chromium-kiosk` (`tmpfs`): кэш и служебные файлы не пишутся на SD-карту (не изнашивают её) и не переживают перезагрузку Pi.
+- **Жёсткая зачистка перед каждым запуском** — `rm -rf "$PROFILE_DIR"` + `mkdir -p` в начале каждой итерации цикла: никакого lock от упавшего процесса, каждый старт с чистого профиля.
+- **Снимок памяти перед каждым запуском** — `free -h >> "$LOG"`: рядом с «Chromium exited with code N» видно, сколько было занято RAM/swap. Растущий `used` между перезапусками или почти нулевой `available` — признак утечки или OOM-killer (подтвердить: `journalctl -k | grep -i oom`).
+
+```bash
+tail -n 50 ~/.cache/deskhub-kiosk.log      # история запусков и память
+du -sh /dev/shm/chromium-kiosk             # размер профиля в RAM (обычно десятки МБ)
+```
+
+### 4.6. Демон питания дисплея (`deploy/pi/display_manager.py`)
+
+Второй хостовый скрипт в репозитории — HTTP-демон на порту 5055 (systemd-сервис `deskhub-display`), который гасит HDMI через `wlr-randr` и будит экран по касанию тачскрина (`/dev/input/event5`). Устройство, установка и диагностика — `Hardware_Display_Power.md`.
+
+```bash
+scp deploy/pi/display_manager.py pi@deskhub.local:~/deskhub/   # с Mac; затем sudo systemctl restart deskhub-display
+```
 
 ## 5. Эксплуатация
 

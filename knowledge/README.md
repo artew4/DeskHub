@@ -23,7 +23,7 @@
 ```
 ┌─────────────────────────── Raspberry Pi 5 · Raspberry Pi OS (Bookworm, 64-bit) ─────────────────────────────┐
 │                                                                                                             │
-│   Chromium --kiosk --incognito --app=http://localhost:5000                                                  │
+│   Chromium --kiosk --app=http://localhost:5000 (профиль в /dev/shm)                                         │
 │        │  HTTP (static, REST)          ▲  WebSocket (SignalR push)                                          │
 │        ▼                               │                                                                    │
 │   ┌──────────────── Docker: deskhub-api (linux/arm64) ──────────────────┐     ┌ Docker: deskhub-postgres ┐  │
@@ -46,7 +46,7 @@
 | **Внешние API — только бэкенд** | wttr.in (погода), Яндекс Карты и календари опрашивают фоновые сервисы бэкенда. Браузер во внешний интернет не ходит. |
 | **Хранение** | PostgreSQL через EF Core (Code-First): история погоды и пробок, маршруты, настройки. Телеметрия живёт в памяти. |
 | **Доставка** | Один multi-stage `Dockerfile` (Vite build → `wwwroot` → `dotnet publish`) под **`linux/arm64`**, запуск через `docker compose` (API + PostgreSQL). |
-| **Без состояния в браузере** | Chromium запущен в `--incognito`, поэтому всё, что должно сохраняться, хранится на бэкенде. |
+| **Без состояния в браузере** | Профиль Chromium живёт в RAM (`/dev/shm`) и пересоздаётся при каждом запуске браузера (`kiosk.sh`), поэтому всё, что должно сохраняться, хранится на бэкенде; `localStorage` — только для удобств этого экрана (яркость), переживает перезагрузку страницы, но не перезапуск Chromium. |
 
 ### Контракт между слоями (кратко)
 
@@ -85,7 +85,8 @@ knowledge/
 │
 └── Infrastructure/                        ← доставка и запуск на устройстве
     ├── Docker_Setup.md                    multi-stage Dockerfile под linux/arm64
-    └── Compose_And_Pi.md                  docker-compose (API + PostgreSQL), запуск Chromium Kiosk на Pi
+    ├── Compose_And_Pi.md                  docker-compose (API + PostgreSQL), запуск Chromium Kiosk на Pi
+    └── Hardware_Display_Power.md          HDMI off/on на хосте: deploy/pi/display_manager.py, evdev, systemd
 ```
 
 | Папка | Когда читать |
@@ -99,7 +100,7 @@ knowledge/
 1. `README.md` (этот файл).
 2. Для фронтенда: `Frontend_react/01_Frontend_TechStack.md` → `Core.md` → нужный `Feature_*.md`.
 3. Для бэкенда: `Backend_dotnet/Core_Architecture.md` → нужный профильный файл.
-4. Для деплоя: `Infrastructure/Docker_Setup.md` → `Compose_And_Pi.md`.
+4. Для деплоя: `Infrastructure/Docker_Setup.md` → `Compose_And_Pi.md` → `Hardware_Display_Power.md` (демон питания дисплея на хосте).
 
 ---
 

@@ -35,6 +35,13 @@ builder.Services.AddSingleton<DashboardNotifier>();
 
 // --- Режим питания экрана (Normal / Dimmed / Sleep по МСК); регистрируется раньше воркеров — они спрашивают IsSleeping ---
 builder.Services.AddOptions<PowerOptions>().BindConfiguration(PowerOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+builder.Services.AddHttpClient(DisplayHostClient.HttpClientName, (sp, client) =>
+{
+    var url = sp.GetRequiredService<IOptions<PowerOptions>>().Value.DisplayHostUrl;
+    if (!string.IsNullOrWhiteSpace(url)) client.BaseAddress = new Uri(url);
+    client.Timeout = DisplayHostClient.Timeout;
+});
+builder.Services.AddSingleton<DisplayHostClient>(); // HDMI off/on через демон на хосте (Hardware_Display_Power.md)
 builder.Services.AddSingleton<PowerModeService>();
 builder.Services.AddHostedService(sp => sp.GetRequiredService<PowerModeService>());
 
@@ -129,6 +136,10 @@ app.MapHealthChecks("/health");
 
 app.MapGet("/api/dashboard/snapshot", (DashboardState state) => state.GetSnapshot())
     .WithName("GetDashboardSnapshot");
+
+// Демон дисплея на хосте: касание погашенного (HDMI off) экрана → Sleep → Normal (ночью — Dimmed на 5 мин) + PowerModeChanged
+app.MapPost("/api/system/wake", (PowerModeService power) => power.WakeTemporarily())
+    .WithName("WakeDisplay");
 
 app.MapHub<DashboardHub>("/hubs/dashboard");
 

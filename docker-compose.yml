@@ -32,6 +32,10 @@ services:
       Calendar__TimeZone: ${TZ:-Europe/Moscow}
       Telemetry__ProcRoot: /host/proc
       Telemetry__SysRoot: /host/sys
+    # Демон питания дисплея на хосте (HDMI off/on через wlr-randr, порт 5055): контейнер ходит к нему
+    # по host.docker.internal — knowledge/Infrastructure/Hardware_Display_Power.md
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - /proc:/host/proc:ro     # метрики хоста для TelemetryWorker
       - /sys:/host/sys:ro

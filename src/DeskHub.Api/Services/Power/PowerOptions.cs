@@ -20,4 +20,9 @@ public sealed class PowerOptions
 
     /// <summary>Сколько длится временное пробуждение по WakeScreen().</summary>
     [Range(1, 60)] public int WakeMinutes { get; init; } = 5;
+
+    /// <summary>
+    /// Демон питания дисплея на хосте (POST sleep / wake), с завершающим «/». Пусто — аппаратное отключение HDMI выключено.
+    /// </summary>
+    public string DisplayHostUrl { get; init; } = "http://host.docker.internal:5055/";
 }

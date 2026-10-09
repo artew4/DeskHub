@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { BrightnessOverlay } from './components/BrightnessOverlay'
+import { NightShiftOverlay } from './components/NightShiftOverlay'
 import { PowerOverlay } from './components/PowerOverlay'
 import { ScreenCarousel } from './components/ScreenCarousel'
 import { MainScreen } from './features/dashboard/MainScreen'
@@ -13,7 +14,7 @@ function App() {
     startDashboardConnection()
   }, [])
 
-  // Тема по времени суток: класс на <html>, цвета — CSS-переменные (src/index.css)
+  // Тема по времени суток (или всегда светлая — настройка «Светлая тема»): класс на <html>, цвета — CSS-переменные (src/index.css)
   useTimeTheme()
 
   // В режиме sleep интерфейс скрыт (display: none): под чёрным экраном не крутятся CSS-анимации кота и прочее
@@ -28,6 +29,7 @@ function App() {
           <SystemScreen />
         </ScreenCarousel>
       </div>
+      <NightShiftOverlay />
       <BrightnessOverlay />
       <PowerOverlay />
     </div>

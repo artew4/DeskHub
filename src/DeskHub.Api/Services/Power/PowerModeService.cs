@@ -14,12 +14,16 @@ namespace DeskHub.Api.Services.Power;
 /// - WakeScreen() в режиме Sleep: <c>_wakeUntil = now + 5 мин</c> → Dimmed сразу; таймер срабатывает в <c>_wakeUntil</c> → снова Sleep.
 /// - SetSleepMode() (кнопка «В режим сна»): принудительный Sleep в любое время — <c>_forcedSleepUntil</c> = ближайшее утро
 ///   (NormalFrom), временное пробуждение сбрасывается. Снимается касанием (WakeScreen) или утром по таймеру.
+/// - Аппаратный дисплей: при входе в Sleep (по любой причине) — POST sleep демону на хосте (HDMI off),
+///   при выходе из Sleep — POST wake (<see cref="DisplayHostClient"/>). Касание выключенного экрана ловит демон
+///   и вызывает POST /api/system/wake → <see cref="WakeTemporarily"/>.
 /// </summary>
 public sealed class PowerModeService(
     TimeProvider time,
     IOptions<PowerOptions> options,
     DashboardState state,
     DashboardNotifier notifier,
+    DisplayHostClient displayHost,
     ILogger<PowerModeService> logger) : IHostedService, IDisposable
 {
     private readonly PowerOptions _settings = options.Value;
@@ -46,7 +50,7 @@ public sealed class PowerModeService(
     }
 
     /// <summary>
-    /// Временное пробуждение (метод хаба WakeScreen). Принудительный сон снимается полностью — дальше режим по расписанию;
+    /// Временное пробуждение (метод хаба WakeScreen и POST /api/system/wake от демона дисплея). Принудительный сон снимается полностью — дальше режим по расписанию;
     /// в ночном Sleep по расписанию экран включается затемнённым на WakeMinutes минут.
     /// </summary>
     public PowerModeModel WakeTemporarily()
@@ -123,8 +127,11 @@ public sealed class PowerModeService(
 
         if (_published != mode)
         {
+            var wasSleeping = _published == PowerMode.Sleep;
             _published = mode;
             state.SetPowerMode(model);
+            if (mode == PowerMode.Sleep) displayHost.Send(sleep: true);
+            else if (wasSleeping) displayHost.Send(sleep: false);
             logger.LogInformation("Power mode → {Mode}", mode);
             _ = notifier.SendPowerModeUpdate(model).ContinueWith(
                 t => logger.LogWarning(t.Exception, "PowerModeChanged broadcast failed"), TaskContinuationOptions.OnlyOnFaulted);

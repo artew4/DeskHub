@@ -80,7 +80,7 @@ docker build --platform linux/arm64 -t artembarabash/deskhub:latest . && docker 
    curl -fsS http://localhost:5000/health     # Healthy
    ```
 
-6. Включить автозапуск Chromium в режиме Kiosk (`kiosk.sh` ждёт готовности API, запускает Chromium с `--kiosk --incognito --app=http://localhost:5000` и перезапускает его при падении):
+6. Включить автозапуск Chromium в режиме Kiosk (`kiosk.sh` ждёт готовности API, запускает Chromium с `--kiosk --app=http://localhost:5000` и профилем в RAM `/dev/shm/chromium-kiosk`, который пересоздаётся перед каждым запуском, пишет состояние памяти в `~/.cache/deskhub-kiosk.log` и перезапускает браузер при падении):
 
    ```bash
    mkdir -p ~/.config/labwc
@@ -88,6 +88,8 @@ docker build --platform linux/arm64 -t artembarabash/deskhub:latest . && docker 
    ```
 
    Автологин в рабочий стол и отключение гашения экрана — [`knowledge/Infrastructure/Compose_And_Pi.md`](knowledge/Infrastructure/Compose_And_Pi.md), разделы 3–4.
+
+7. Аппаратное отключение дисплея на ночь (HDMI off/on + пробуждение касанием): скопировать `deploy/pi/display_manager.py` в `~/deskhub/` и установить его как systemd-сервис `deskhub-display` — пошагово в [`knowledge/Infrastructure/Hardware_Display_Power.md`](knowledge/Infrastructure/Hardware_Display_Power.md). Без демона дашборд работает, ночью экран просто программно чёрный.
 
 ### 3. Обновление
 

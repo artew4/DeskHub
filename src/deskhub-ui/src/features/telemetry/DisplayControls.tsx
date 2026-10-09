@@ -1,17 +1,36 @@
 import { Moon, Sun } from 'lucide-react'
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react'
 import { setSleepMode } from '../../services/signalrConnection'
-import { MAX_BRIGHTNESS, MIN_BRIGHTNESS, useBrightnessStore } from '../../store/useBrightnessStore'
+import { MAX_BRIGHTNESS, MIN_BRIGHTNESS, useDisplaySettingsStore } from '../../store/useDisplaySettingsStore'
 
 /** Бегунок и высота трека — 44 px: комфортная зона под палец на тачскрине. */
 const THUMB_PX = 44
 const KEY_STEP = 5
 
-/** Блок управления экраном внизу карточки «Система»: яркость и кнопка сна. */
+/** Блок управления экраном внизу карточки «Система»: яркость, светлая тема, Night Shift и кнопка сна. */
 export function DisplayControls() {
+  const forceLightTheme = useDisplaySettingsStore((s) => s.forceLightTheme)
+  const setForceLightTheme = useDisplaySettingsStore((s) => s.setForceLightTheme)
+  const nightShiftEnabled = useDisplaySettingsStore((s) => s.nightShiftEnabled)
+  const setNightShiftEnabled = useDisplaySettingsStore((s) => s.setNightShiftEnabled)
+
   return (
     <div className="mt-4 flex flex-col gap-3 border-t border-fg-muted/20 pt-4">
       <BrightnessSlider />
+      <div className="grid grid-cols-2 gap-3">
+        <ToggleTile
+          title="Светлая тема"
+          caption="Принудительно"
+          active={forceLightTheme}
+          onToggle={() => setForceLightTheme(!forceLightTheme)}
+        />
+        <ToggleTile
+          title="Night Shift"
+          caption="Защита глаз"
+          active={nightShiftEnabled}
+          onToggle={() => setNightShiftEnabled(!nightShiftEnabled)}
+        />
+      </div>
       <button
         type="button"
         onClick={setSleepMode}
@@ -24,13 +43,43 @@ export function DisplayControls() {
 }
 
 /**
+ * Плитка-переключатель (aria-pressed): название, подпись и мини-свитч справа (без иконки — в половину карточки
+ * шириной 180 px иначе не помещаются «Светлая тема» / «Принудительно»).
+ * Включена — янтарная подсветка фона, рамка и свитч; одинаково читается в светлой и тёмной темах.
+ */
+function ToggleTile({ title, caption, active, onToggle }: { title: string; caption: string; active: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onToggle}
+      className={`flex h-14 items-center gap-2 rounded-xl px-3.5 text-left ring-1 ring-inset transition-[background-color,box-shadow,transform] duration-200 ease-kiosk active:scale-[0.97] ${
+        active ? 'bg-amber-400/15 ring-amber-400/70' : 'bg-surface-2 ring-transparent'
+      }`}
+    >
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-label font-semibold text-fg-primary">{title}</span>
+        <span className="block truncate text-xs text-fg-muted">{caption}</span>
+      </span>
+      {/* Мини-свитч — только индикатор состояния (вся плитка — кнопка) */}
+      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors duration-200 ${active ? 'bg-amber-400' : 'bg-fg-muted/40'}`} aria-hidden>
+        <span
+          className="absolute left-0.5 top-0.5 size-4 rounded-full bg-white shadow transition-transform duration-200 ease-kiosk"
+          style={{ transform: active ? 'translateX(16px)' : 'none' }}
+        />
+      </span>
+    </button>
+  )
+}
+
+/**
  * Слайдер яркости 10–100 %. Свой (не input range): трек и бегунок по 44 px, одинаково в любой теме.
  * Жест не доходит до карусели экранов (stopPropagation на pointerdown) — горизонтальное движение по слайдеру
  * не листает экран; захват указателя — тянуть можно и за пределами трека.
  */
 function BrightnessSlider() {
-  const brightness = useBrightnessStore((s) => s.brightness)
-  const setBrightness = useBrightnessStore((s) => s.setBrightness)
+  const brightness = useDisplaySettingsStore((s) => s.brightness)
+  const setBrightness = useDisplaySettingsStore((s) => s.setBrightness)
   const trackRef = useRef<HTMLDivElement>(null)
   const fraction = (brightness - MIN_BRIGHTNESS) / (MAX_BRIGHTNESS - MIN_BRIGHTNESS)
 

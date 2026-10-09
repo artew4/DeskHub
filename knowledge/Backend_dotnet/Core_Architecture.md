@@ -233,6 +233,7 @@ public sealed class DashboardState
 | Метод | Путь | Ответ | Назначение |
 |---|---|---|---|
 | `GET` | `/api/dashboard/snapshot` | `SnapshotDto` | Полный снимок при старте клиента и после реконнекта |
+| `POST` | `/api/system/wake` | `PowerModeModel` | Демон дисплея на хосте: касание погашенного (HDMI off) экрана → `PowerModeService.WakeTemporarily()` + `PowerModeChanged` (`Infrastructure/Hardware_Display_Power.md`) |
 | `GET` | `/api/settings` | `SettingsDto` | Текущие настройки |
 | `PUT` | `/api/settings` | `204` | Изменение настроек → сохранение в БД → `SettingsChanged` всем клиентам |
 | `GET` | `/api/routes` | `RouteConfigDto[]` | Список маршрутов для пробок |

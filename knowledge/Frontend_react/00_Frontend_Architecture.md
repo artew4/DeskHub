@@ -44,12 +44,12 @@
 
 ## 3. Запуск и окружение клиента
 
-Chromium запускается автозапуском (systemd user service или `~/.config/labwc/autostart` / `wayfire.ini` в зависимости от композитора):
+Chromium запускает `deploy/pi/kiosk.sh` из `~/.config/labwc/autostart` (актуальный набор флагов — в скрипте и `Infrastructure/Compose_And_Pi.md`, раздел 4):
 
 ```bash
 chromium-browser \
   --kiosk \
-  --incognito \
+  --user-data-dir=/dev/shm/chromium-kiosk \
   --app=http://localhost:5000 \
   --noerrdialogs \
   --disable-infobars \
@@ -62,12 +62,12 @@ chromium-browser \
 | Флаг | Зачем |
 |---|---|
 | `--kiosk` | Полноэкранный режим без UI браузера |
-| `--incognito` | Чистое состояние при каждом старте, нет диалогов восстановления сессии |
+| `--user-data-dir=/dev/shm/…` | Профиль в RAM, удаляется и создаётся заново перед каждым запуском: чистое состояние, нет диалогов восстановления сессии и ошибки `SingletonLock` |
 | `--app=...` | Открывает приложение как standalone-окно |
 | `--disable-pinch` | Запрещает зум жестом щипка |
 | `--overscroll-history-navigation=0` | Запрещает свайп «назад» |
 
-> ⚠️ Из-за `--incognito` **`localStorage` не переживает перезапуск браузера**. Любые настройки, которые должны сохраняться, хранятся на бэкенде (PostgreSQL).
+> ⚠️ Профиль пересоздаётся при каждом запуске браузера, поэтому **`localStorage` не переживает перезапуск Chromium** (перезагрузку страницы — переживает). Любые настройки, которые должны сохраняться, хранятся на бэкенде (PostgreSQL).
 
 ---
 

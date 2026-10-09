@@ -14,6 +14,9 @@ URL="http://localhost:5000"
 HEALTH_URL="$URL/health"
 WAIT_TIMEOUT_SEC=300          # сколько ждать API при холодном старте
 LOG="$HOME/.cache/deskhub-kiosk.log"
+# Профиль Chromium — в RAM-диске: пересоздаётся перед каждым запуском (нет SingletonLock от упавшего процесса,
+# нет накопления кэша, не изнашивается SD-карта)
+PROFILE_DIR="/dev/shm/chromium-kiosk"
 
 mkdir -p "$(dirname "$LOG")"
 log() { echo "$(date '+%F %T') $*" >> "$LOG"; }
@@ -38,15 +41,22 @@ wait_for_api
 
 # Перезапуск Chromium, если он упал или был закрыт
 while true; do
+  # Состояние памяти перед каждым стартом — по логу видно, не упал ли Chromium из-за утечки / нехватки RAM
+  log "Memory before start:"
+  free -h >> "$LOG"
+  # Жёсткая зачистка профиля: SingletonLock/SingletonSocket упавшего Chromium иначе мешают новому запуску
+  rm -rf "$PROFILE_DIR"
+  mkdir -p "$PROFILE_DIR"
   log "Starting Chromium"
   "$CHROMIUM" \
     --kiosk \
-    --incognito \
+    --user-data-dir="$PROFILE_DIR" \
     --app="$URL" \
     --ozone-platform=wayland \
     --noerrdialogs \
     --disable-infobars \
     --disable-session-crashed-bubble \
+    --disable-crash-reporter \
     --disable-features=TranslateUI \
     --disable-pinch \
     --overscroll-history-navigation=0 \

@@ -40,7 +40,7 @@ DeskHub/
 ├── src/
 │   ├── DeskHub.Api/          ← ASP.NET Core (.NET 10); wwwroot/ — артефакт сборки фронтенда
 │   └── deskhub-ui/           ← React + Vite + TS + Tailwind v3
-├── deploy/pi/                ← kiosk.sh, скрипты бэкапа (создаются на этапе деплоя)
+├── deploy/pi/                ← kiosk.sh, display_manager.py (хостовые скрипты Pi)
 └── knowledge/
 ```
 
