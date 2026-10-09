@@ -1,39 +1,44 @@
 import { memo, useId } from 'react'
 import type { RoomLayout } from './catStates'
-import { SKYLINE_COLOR, SKY_GRADIENT, isOvercast, lampOn, type RoomPhase, type SkyCondition } from './roomEnvironment'
+import { LAMP_X, SKYLINE_COLOR, SKY_GRADIENT, WINDOW, isOvercast, lampOn, type RoomPhase, type SkyCondition } from './roomEnvironment'
 
-// Палитра комнаты — приглушённые тона в гамме дашборда (фон карточки — surface-1 #14171C)
+/**
+ * Палитра комнаты — светлая пастель: днём комната гармонирует со светлыми темами дашборда,
+ * вечером и ночью уходит в полумрак за счёт слоя освещения (RoomLighting), а не тёмных базовых цветов.
+ * Пол — светлый холодный серо-голубой: на нём хорошо читается рыжий кот.
+ */
 const C = {
-  wall: '#171B21',
-  wallLow: '#15191E',
-  floor: '#101318',
-  floorLine: '#14181D',
-  baseboard: '#1F242C',
-  frame: '#2A303A',
-  curtain: '#2A2433',
-  wood: '#4A3B30',
-  woodDark: '#3A2E26',
-  rug: '#2A2233',
-  rugLine: '#3A2F45',
-  bed: '#2E3A50',
-  bedInner: '#3A4A66',
-  leaf: '#3F6B4E',
-  leafDark: '#2F5340',
-  pot: '#5A4A40',
+  wall: '#ECE5DC',
+  wallTop: '#E3DBD0',
+  wainscot: '#E0D6CA',
+  floor: '#CDD3DA',
+  floorLine: '#BEC5CE',
+  baseboard: '#F7F3EE',
+  frame: '#FAF7F2',
+  frameEdge: '#D6CDC1',
+  curtain: '#A9C2BA',
+  curtainFold: '#93ADA5',
+  rod: '#B79A7C',
+  cord: '#8A8F96',
+  lampShade: '#5E6773',
+  wood: '#C49A72',
+  woodDark: '#A57D58',
+  rug: '#E3C7B8',
+  rugLine: '#CFA996',
+  bed: '#9DB3C8',
+  bedInner: '#BACBDC',
+  leaf: '#6E9C7A',
+  leafDark: '#507F5F',
+  pot: '#C98E6E',
   warm: '#F5C451',
   moon: '#F4E9C8',
 }
 
-
-/**
- * Комната кота — плоский SVG в реальном размере карточки (1:1, без масштабирования: кот и якоря в тех же пикселях).
- * Объекты нарисованы в базовом макете 574×278 и разнесены группами по layout (roomLayout в catStates.ts):
- * окно — у левого края, лампа/картина/коврик — по центру, полка/растение — у правого края, всё — от уровня пола.
- * Меняется только при смене дня и ночи или размера карточки.
- */
 /** Плавная смена освещения при смене фазы суток: opacity за 3 с (элемент всегда смонтирован). */
 const TRANSITION = '3s ease-in-out'
 const fade = (opacity: number) => ({ opacity, transition: `opacity ${TRANSITION}` })
+
+const G = WINDOW.glass
 
 interface RoomProps {
   phase: RoomPhase
@@ -41,40 +46,47 @@ interface RoomProps {
   layout: RoomLayout
 }
 
+/**
+ * Комната кота — плоский SVG в реальном размере карточки (1:1, без масштабирования: кот и якоря в тех же пикселях).
+ * Объекты нарисованы в базовом макете 574×278 и разнесены группами по layout (roomLayout в catStates.ts):
+ * окно — у левого края, лампа/картина/коврик — по центру, полка/растение — у правого края, всё — от уровня пола.
+ */
 export const Room = memo(function Room({ phase, sky, layout }: RoomProps) {
   const isNight = lampOn(phase) // лампа, огни города и гирлянда — вечером и ночью
+  const sunny = !isNight && !isOvercast(sky)
   const { width: w, height: h, floorTop, centerShift, rightShift, verticalShift } = layout
-  const lampX = 300 + centerShift
+  const lampX = LAMP_X + centerShift
   return (
     <svg viewBox={`0 0 ${w} ${h}`} width={w} height={h} className="absolute inset-0" aria-hidden>
-      {/* Стена, карниз и пол — во всю ширину */}
+      {/* Стена, карниз, панели, плинтус и пол — во всю ширину */}
       <rect width={w} height={h} fill={C.wall} />
-      <rect width={w} height={8} fill={C.wallLow} />
-      <rect y={floorTop - 64} width={w} height={64} fill={C.wallLow} />
+      <rect width={w} height={8} fill={C.wallTop} />
+      <rect y={floorTop - 64} width={w} height={64} fill={C.wainscot} />
+      <rect y={floorTop - 66} width={w} height={2} fill={C.baseboard} />
       <rect y={floorTop} width={w} height={h - floorTop} fill={C.floor} />
-      <rect y={floorTop - 5} width={w} height={6} fill={C.baseboard} />
-      <line x1={0} y1={floorTop + 22} x2={w} y2={floorTop + 22} stroke={C.floorLine} strokeWidth={2} />
-      <line x1={0} y1={floorTop + 46} x2={w} y2={floorTop + 46} stroke={C.floorLine} strokeWidth={2} />
+      <rect y={floorTop - 6} width={w} height={7} fill={C.baseboard} />
+      <line x1={0} y1={floorTop + 22} x2={w} y2={floorTop + 22} stroke={C.floorLine} strokeWidth={1.5} />
+      <line x1={0} y1={floorTop + 46} x2={w} y2={floorTop + 46} stroke={C.floorLine} strokeWidth={1.5} />
 
       {/* Гирлянда — только в высокой комнате (≥ 24 px над базовым макетом), иначе наползает на лампу */}
       {verticalShift >= 24 && <StringLights width={w} sag={Math.min(26, 10 + verticalShift / 4)} isNight={isNight} />}
 
       {/* Шнур лампы — от потолка, какой бы высоты ни была комната */}
-      <line x1={lampX} y1={0} x2={lampX} y2={22 + verticalShift} stroke={C.frame} strokeWidth={2} />
+      <line x1={lampX} y1={0} x2={lampX} y2={22 + verticalShift} stroke={C.cord} strokeWidth={1.5} />
 
-      {/* Левая группа: окно и пятно света от него */}
+      {/* Левая группа: большое окно и пятно солнечного света от него на полу */}
       <g transform={`translate(0 ${verticalShift})`}>
-        <polygon points="66,214 204,214 250,262 40,262" fill="#FFFFFF" style={fade(!isNight && !isOvercast(sky) ? 0.035 : 0)} />
+        <polygon points={`${G.x},214 ${G.x + G.width},214 ${G.x + G.width + 70},262 0,262`} fill="#FFFFFF" style={fade(sunny ? 0.35 : !isNight ? 0.12 : 0)} />
         <Window phase={phase} sky={sky} />
       </g>
 
       {/* Центральная группа: лампа, конус света, картина, коврик с лежанкой */}
       <g transform={`translate(${centerShift} ${verticalShift})`}>
-        <polygon points="282,36 318,36 384,214 216,214" fill={C.warm} style={fade(isNight ? 0.05 : 0)} />
+        <polygon points={`${LAMP_X - 18},36 ${LAMP_X + 18},36 ${LAMP_X + 84},214 ${LAMP_X - 84},214`} fill={C.warm} style={fade(isNight ? 0.07 : 0)} />
         <CenterGroup isNight={isNight} />
       </g>
 
-      {/* Правая группа: полка и напольное растение */}
+      {/* Правая группа: полка, напольное растение, миска */}
       <g transform={`translate(${rightShift} ${verticalShift})`}>
         <Shelf />
         <FloorPlant />
@@ -107,7 +119,7 @@ function StringLights({ width, sag, isNight }: { width: number; sag: number; isN
   }
   return (
     <g>
-      <path d={wire} fill="none" stroke={C.frame} strokeWidth={1.5} />
+      <path d={wire} fill="none" stroke={C.cord} strokeWidth={1.5} />
       {bulbs.map((b, i) => (
         <g key={i}>
           {isNight && <circle cx={b.x} cy={b.y + 5} r={7} fill={b.color} opacity={0.12} />}
@@ -117,7 +129,7 @@ function StringLights({ width, sag, isNight }: { width: number; sag: number; isN
             rx={2.6}
             ry={3.6}
             fill={b.color}
-            opacity={isNight ? 0.95 : 0.35}
+            opacity={isNight ? 0.95 : 0.5}
             className={isNight ? 'motion-safe:animate-twinkle' : ''}
             style={isNight ? { animationDelay: `${(i % 5) * 0.6}s`, animationDuration: '4s' } : undefined}
           />
@@ -128,34 +140,36 @@ function StringLights({ width, sag, isNight }: { width: number; sag: number; isN
 }
 
 function CenterGroup({ isNight }: { isNight: boolean }) {
+  const x = LAMP_X
   return (
     <g>
-      {/* Картина */}
-      <rect x={330} y={40} width={52} height={38} rx={2} fill={C.frame} />
-      <rect x={334} y={44} width={44} height={30} fill="#1E2A36" />
-      <polygon points="334,74 350,56 362,66 368,60 378,74" fill={C.leafDark} />
-      <circle cx={368} cy={52} r={3} fill={isNight ? C.moon : C.warm} opacity={0.8} />
+      {/* Картина — справа от лампы, над полкой */}
+      <rect x={384} y={30} width={54} height={40} rx={2} fill={C.frame} stroke={C.frameEdge} strokeWidth={1} />
+      <rect x={389} y={35} width={44} height={30} fill="#CFE2EA" />
+      <polygon points="389,65 405,47 417,57 423,51 433,65" fill={C.leaf} />
+      <circle cx={423} cy={43} r={3} fill={isNight ? C.moon : C.warm} opacity={0.9} />
 
       {/* Подвесная лампа (шнур — в Room) */}
-      <path d="M286,22 L314,22 L322,36 L278,36 Z" fill={C.frame} />
-      <ellipse cx={300} cy={37} rx={6} ry={2.5} style={{ fill: isNight ? C.warm : '#3A414D', transition: `fill ${TRANSITION}` }} />
+      <path d={`M${x - 14},22 L${x + 14},22 L${x + 22},36 L${x - 22},36 Z`} fill={C.lampShade} />
+      <ellipse cx={x} cy={37} rx={6} ry={2.5} style={{ fill: isNight ? C.warm : '#C9CED4', transition: `fill ${TRANSITION}` }} />
 
       {/* Коврик и лежанка */}
-      <ellipse cx={300} cy={256} rx={96} ry={17} fill={C.rug} />
-      <ellipse cx={300} cy={256} rx={80} ry={12} fill="none" stroke={C.rugLine} strokeWidth={2} strokeDasharray="6 5" />
-      <ellipse cx={300} cy={251} rx={48} ry={13} fill={C.bed} />
-      <ellipse cx={300} cy={250} rx={37} ry={8} fill={C.bedInner} />
+      <ellipse cx={x} cy={256} rx={96} ry={17} fill={C.rug} />
+      <ellipse cx={x} cy={256} rx={80} ry={12} fill="none" stroke={C.rugLine} strokeWidth={2} strokeDasharray="6 5" />
+      <ellipse cx={x} cy={251} rx={48} ry={13} fill={C.bed} />
+      <ellipse cx={x} cy={250} rx={37} ry={8} fill={C.bedInner} />
     </g>
   )
 }
 
-/** Окно: шторы, рама, небо (градиент по фазе и погоде), светила, силуэт города. Погода (облака, осадки) — HTML-слой WindowWeather поверх, переплёт — RoomFront. */
+/** Большое окно: шторы, белая рама, небо (градиент по фазе и погоде), светила, силуэт города. Погода — HTML-слой WindowWeather поверх, переплёт — RoomFront. */
 function Window({ phase, sky }: { phase: RoomPhase; sky: SkyCondition }) {
   const overcast = isOvercast(sky)
   const [top, bottom] = overcast ? SKY_GRADIENT[phase].overcast : SKY_GRADIENT[phase].clear
   // id постоянный: при смене фазы/погоды меняются только stop-color — и плавно перетекают (transition 3 с)
   const gradientId = `sky-${useId().replace(/:/g, '')}`
   const lit = lampOn(phase)
+  const F = WINDOW.frame
   return (
     <g>
       <defs>
@@ -164,13 +178,15 @@ function Window({ phase, sky }: { phase: RoomPhase; sky: SkyCondition }) {
           <stop offset="1" style={{ stopColor: bottom, transition: `stop-color ${TRANSITION}` }} />
         </linearGradient>
       </defs>
-      {/* Шторы */}
-      <path d="M40,24 L62,24 L60,146 Q50,150 40,146 Z" fill={C.curtain} />
-      <path d="M208,24 L230,24 L230,146 Q220,150 210,146 Z" fill={C.curtain} />
-      <rect x={36} y={20} width={198} height={5} rx={2} fill={C.frame} />
+      {/* Карниз и шторы по бокам рамы */}
+      <rect x={F.x - 26} y={F.y - 7} width={F.width + 52} height={4} rx={2} fill={C.rod} />
+      <path d={`M${F.x - 24},${F.y - 4} L${F.x + 2},${F.y - 4} L${F.x},${F.y + F.height + 2} Q${F.x - 12},${F.y + F.height + 8} ${F.x - 24},${F.y + F.height + 2} Z`} fill={C.curtain} />
+      <path d={`M${F.x - 14},${F.y} L${F.x - 12},${F.y + F.height}`} stroke={C.curtainFold} strokeWidth={2} />
+      <path d={`M${F.x + F.width - 2},${F.y - 4} L${F.x + F.width + 24},${F.y - 4} L${F.x + F.width + 24},${F.y + F.height + 2} Q${F.x + F.width + 12},${F.y + F.height + 8} ${F.x + F.width},${F.y + F.height + 2} Z`} fill={C.curtain} />
+      <path d={`M${F.x + F.width + 12},${F.y} L${F.x + F.width + 14},${F.y + F.height}`} stroke={C.curtainFold} strokeWidth={2} />
 
-      <rect x={60} y={30} width={150} height={112} rx={4} fill={C.frame} />
-      <rect x={66} y={36} width={138} height={100} fill={`url(#${gradientId})`} />
+      <rect x={F.x} y={F.y} width={F.width} height={F.height} rx={4} fill={C.frame} stroke={C.frameEdge} strokeWidth={1} />
+      <rect x={G.x} y={G.y} width={G.width} height={G.height} fill={`url(#${gradientId})`} />
 
       {/* Светила всех фаз смонтированы, видна только текущая (и только когда небо не затянуто) */}
       {(['morning', 'day', 'evening', 'night'] as const).map((p) => (
@@ -179,13 +195,13 @@ function Window({ phase, sky }: { phase: RoomPhase; sky: SkyCondition }) {
 
       {/* Силуэт города; вечером и ночью — светящиеся окна */}
       <path
-        d="M66,136 L66,112 L80,112 L80,100 L96,100 L96,118 L108,118 L108,94 L124,94 L124,110 L140,110 L140,102 L158,102 L158,120 L172,120 L172,96 L188,96 L188,114 L204,114 L204,136 Z"
+        d="M42,178 L42,142 L60,142 L60,128 L82,128 L82,150 L98,150 L98,120 L120,120 L120,140 L142,140 L142,130 L166,130 L166,152 L184,152 L184,124 L206,124 L206,146 L228,146 L228,134 L246,134 L246,148 L262,148 L262,178 Z"
         style={{ fill: SKYLINE_COLOR[phase], transition: `fill ${TRANSITION}` }}
       />
-      <g style={fade(lit ? 0.75 : 0)}>
+      <g style={fade(lit ? 0.8 : 0)}>
         {[
-          [84, 106], [112, 100], [116, 108], [146, 108], [176, 102], [180, 110], [194, 120],
-        ].map(([x, y]) => <rect key={`${x}-${y}`} x={x} y={y} width={2.5} height={3} fill={C.warm} />)}
+          [66, 134], [104, 126], [110, 136], [150, 138], [190, 130], [196, 140], [212, 152], [234, 140], [252, 154], [72, 150],
+        ].map(([x, y]) => <rect key={`${x}-${y}`} x={x} y={y} width={3} height={3.5} fill={C.warm} />)}
       </g>
     </g>
   )
@@ -196,36 +212,42 @@ function Celestial({ phase, visible }: { phase: RoomPhase; visible: boolean }) {
   if (phase === 'night') {
     return (
       <g style={fade(visible ? 1 : 0)}>
-        <circle cx={174} cy={60} r={11} fill={C.moon} />
-        <circle cx={180} cy={56} r={10} fill={SKY_GRADIENT.night.clear[0]} />
+        <circle cx={222} cy={58} r={13} fill={C.moon} />
+        <circle cx={229} cy={53} r={12} fill={SKY_GRADIENT.night.clear[0]} />
         {[
-          [86, 50, 0], [120, 44, 1.2], [148, 70, 0.6], [96, 78, 2], [192, 88, 1.6],
+          [64, 46, 0], [110, 36, 1.2], [150, 70, 0.6], [88, 92, 2], [244, 98, 1.6], [180, 40, 0.9], [128, 104, 2.4],
         ].map(([x, y, delay]) => (
-          <circle key={`${x}-${y}`} cx={x} cy={y} r={1.2} fill="#FFFFFF" className={visible ? 'motion-safe:animate-twinkle' : ''} style={{ animationDelay: `${delay}s` }} />
+          <circle key={`${x}-${y}`} cx={x} cy={y} r={1.3} fill="#FFFFFF" className={visible ? 'motion-safe:animate-twinkle' : ''} style={{ animationDelay: `${delay}s` }} />
         ))}
       </g>
     )
   }
-  const sun = { morning: { cx: 92, cy: 98, r: 11, fill: '#FFD08A' }, day: { cx: 96, cy: 60, r: 12, fill: C.warm }, evening: { cx: 182, cy: 112, r: 14, fill: '#FF9A5A' } }[phase]
+  const sun = {
+    morning: { cx: 78, cy: 136, r: 14, fill: '#FFD08A' },
+    day: { cx: 88, cy: 60, r: 15, fill: C.warm },
+    evening: { cx: 226, cy: 146, r: 18, fill: '#FF9A5A' },
+  }[phase]
   return (
     <g style={fade(visible ? 1 : 0)}>
-      <circle cx={sun.cx} cy={sun.cy} r={sun.r + 6} fill={sun.fill} opacity={0.18} />
+      <circle cx={sun.cx} cy={sun.cy} r={sun.r + 8} fill={sun.fill} opacity={0.2} />
       <circle {...sun} />
     </g>
   )
 }
 
 /**
- * Передний план окна — поверх слоя погоды (облака и осадки идут «за стеклом»): переплёт и подоконник.
+ * Передний план окна — поверх слоя погоды (облака и осадки идут «за стеклом»): белый переплёт и широкий подоконник.
  * Статичный SVG того же размера, что и комната.
  */
 export const RoomFront = memo(function RoomFront({ layout }: { layout: RoomLayout }) {
+  const S = WINDOW.sill
   return (
     <svg viewBox={`0 0 ${layout.width} ${layout.height}`} width={layout.width} height={layout.height} className="pointer-events-none absolute inset-0" aria-hidden>
       <g transform={`translate(0 ${layout.verticalShift})`}>
-        <line x1={135} y1={36} x2={135} y2={136} stroke={C.frame} strokeWidth={4} />
-        <line x1={66} y1={86} x2={204} y2={86} stroke={C.frame} strokeWidth={4} />
-        <rect x={52} y={140} width={166} height={8} rx={2} fill="#2F3540" />
+        <line x1={WINDOW.mullionX} y1={G.y} x2={WINDOW.mullionX} y2={G.y + G.height} stroke={C.frame} strokeWidth={5} />
+        <line x1={G.x} y1={WINDOW.mullionY} x2={G.x + G.width} y2={WINDOW.mullionY} stroke={C.frame} strokeWidth={5} />
+        <rect x={S.x} y={S.y} width={S.width} height={S.height} rx={2} fill={C.baseboard} stroke={C.frameEdge} strokeWidth={1} />
+        <rect x={S.x + 4} y={S.y + S.height} width={S.width - 8} height={3} fill="#000000" opacity={0.08} />
       </g>
     </svg>
   )
@@ -244,9 +266,9 @@ function Shelf() {
       <ellipse cx={411} cy={92} rx={4} ry={12} fill={C.leafDark} />
       <ellipse cx={417} cy={96} rx={4} ry={10} fill={C.leaf} transform="rotate(25 417 96)" />
       {/* Книги */}
-      <rect x={512} y={96} width={7} height={22} rx={1} fill="#3B4A6B" />
-      <rect x={520} y={100} width={6} height={18} rx={1} fill="#6B3B3B" />
-      <rect x={527} y={94} width={7} height={24} rx={1} fill="#3B6B5A" />
+      <rect x={512} y={96} width={7} height={22} rx={1} fill="#7C93B8" />
+      <rect x={520} y={100} width={6} height={18} rx={1} fill="#C98A8A" />
+      <rect x={527} y={94} width={7} height={24} rx={1} fill="#7FB09A" />
     </g>
   )
 }
@@ -255,13 +277,13 @@ function Shelf() {
 function FoodBowl() {
   return (
     <g>
-      <ellipse cx={446} cy={263} rx={15} ry={3} fill="#000000" opacity={0.25} />
-      <path d="M432,254 L460,254 L456,263 L436,263 Z" fill="#3A5A8C" />
-      <ellipse cx={446} cy={254} rx={14} ry={3.2} fill="#4C72AE" />
-      <ellipse cx={446} cy={254} rx={10.5} ry={2} fill="#8B5E3C" />
-      <circle cx={442} cy={253.2} r={1.4} fill="#A87449" />
-      <circle cx={447} cy={252.8} r={1.4} fill="#A87449" />
-      <circle cx={451} cy={253.4} r={1.3} fill="#A87449" />
+      <ellipse cx={462} cy={263} rx={15} ry={3} fill="#000000" opacity={0.12} />
+      <path d="M448,254 L476,254 L472,263 L452,263 Z" fill="#3A5A8C" />
+      <ellipse cx={462} cy={254} rx={14} ry={3.2} fill="#4C72AE" />
+      <ellipse cx={462} cy={254} rx={10.5} ry={2} fill="#8B5E3C" />
+      <circle cx={458} cy={253.2} r={1.4} fill="#A87449" />
+      <circle cx={463} cy={252.8} r={1.4} fill="#A87449" />
+      <circle cx={467} cy={253.4} r={1.3} fill="#A87449" />
     </g>
   )
 }

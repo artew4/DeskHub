@@ -1,6 +1,6 @@
 // «Кошачий мозг»: состояния, веса, тайминги, якоря комнаты и планирование шагов. Чистые функции — без React и таймеров.
 
-import type { RoomPhase } from './roomEnvironment'
+import { LAMP_X, WINDOW, type RoomPhase } from './roomEnvironment'
 
 export type CatState =
   | 'SLEEPING_RUG'
@@ -97,13 +97,14 @@ export function roomLayout(width: number, height: number): RoomLayout {
     rightShift,
     verticalShift,
     anchors: {
-      rug: { x: 300 + centerShift, y: floorTop + 38 },
-      windowSill: { x: 136, y: 142 + verticalShift },
+      rug: { x: LAMP_X + centerShift, y: floorTop + 38 },
+      // Посередине широкого подоконника большого окна (точка опоры лап — верх подоконника)
+      windowSill: { x: WINDOW.mullionX, y: WINDOW.sill.y + verticalShift },
       shelf: { x: 448 + rightShift, y: shelfY },
       shelfNearMug: { x: 470 + rightShift, y: shelfY },
       mugOnShelf: { x: 498 + rightShift, y: shelfY },
-      mugOnFloor: { x: 484 + rightShift, y: h - 14 },
-      groomSpot: { x: 346 + centerShift, y: floorTop + 40 },
+      mugOnFloor: { x: 496 + rightShift, y: h - 14 },
+      groomSpot: { x: LAMP_X + 46 + centerShift, y: floorTop + 40 },
       yarnHome: { x: 168, y: floorTop + 46 },
     },
     floor: { minX: 70, maxX: w - 54, minY: floorTop + 36, maxY: floorTop + 48 },

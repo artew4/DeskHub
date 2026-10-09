@@ -78,3 +78,20 @@ export function cloudColor(phase: RoomPhase, sky: SkyCondition): string {
 
 /** Лампа горит вечером и ночью. */
 export const lampOn = (phase: RoomPhase): boolean => phase === 'evening' || phase === 'night'
+
+// ─── Геометрия комнаты (базовый макет 574×278) — общая для SVG, слоя погоды и освещения ─────
+
+/**
+ * Большое окно — доминанта стены и главный источник света (≈ 1.6 × 1.5 от прежнего 150×112,
+ * площадь стекла ×2.4). Лампа, коврик и картина сдвинуты вправо, чтобы не налезать на шторы.
+ */
+export const WINDOW = {
+  frame: { x: 36, y: 18, width: 232, height: 166 },
+  glass: { x: 42, y: 24, width: 220, height: 154 },
+  mullionX: 152,
+  mullionY: 101,
+  sill: { x: 26, y: 182, width: 252, height: 9 },
+} as const
+
+/** Центр лампы и коврика (раньше 300 — сдвинуто вправо под большое окно). */
+export const LAMP_X = 340

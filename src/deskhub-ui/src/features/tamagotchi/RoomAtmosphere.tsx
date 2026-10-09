@@ -1,14 +1,14 @@
 import { memo, type CSSProperties } from 'react'
 import type { RoomLayout } from './catStates'
-import { cloudColor, hasPrecipitation, isOvercast, type RoomPhase, type SkyCondition } from './roomEnvironment'
+import { LAMP_X, WINDOW, cloudColor, hasPrecipitation, isOvercast, type RoomPhase, type SkyCondition } from './roomEnvironment'
 
 // ─── Погода за окном ─────────────────────────────────────────────────────────
-// HTML-слой ровно поверх стекла окна (66,36 … 204,136 в координатах комнаты). Всё движение — CSS keyframes
+// HTML-слой ровно поверх стекла окна (WINDOW.glass в координатах комнаты). Всё движение — CSS keyframes
 // на transform/opacity отдельных слоёв (will-change: transform → композиция на GPU, SVG комнаты не перерисовывается).
 // Дождь и снег — не сотни частиц, а одна «простыня» с повторяющимся SVG-узором, которая за цикл сдвигается
 // ровно на период плитки: бесшовно и дёшево.
 
-const GLASS = { x: 66, y: 36, width: 138, height: 100 }
+const GLASS = WINDOW.glass
 
 const FOG_HAZE: Record<RoomPhase, string> = {
   morning: 'rgba(214, 208, 204, 0.55)',
@@ -99,14 +99,15 @@ export const WindowWeather = memo(function WindowWeather({ phase, sky, layout }:
       {sky !== 'clear' &&
         (heavy
           ? [
-              { y: -4, scale: 1.4, durationS: 58, delayS: 5 },
-              { y: 8, scale: 1.2, durationS: 74, delayS: 40 },
-              { y: 18, scale: 1.5, durationS: 66, delayS: 22 },
-              { y: 2, scale: 1.1, durationS: 88, delayS: 70 },
+              { y: -6, scale: 2.0, durationS: 62, delayS: 5 },
+              { y: 14, scale: 1.7, durationS: 78, delayS: 40 },
+              { y: 32, scale: 2.1, durationS: 70, delayS: 22 },
+              { y: 4, scale: 1.5, durationS: 92, delayS: 70 },
+              { y: 46, scale: 1.4, durationS: 84, delayS: 55 },
             ]
           : [
-              { y: 6, scale: 0.9, durationS: 80, delayS: 15 },
-              { y: 22, scale: 0.7, durationS: 105, delayS: 60 },
+              { y: 10, scale: 1.3, durationS: 84, delayS: 15 },
+              { y: 38, scale: 1.0, durationS: 110, delayS: 60 },
             ]
         ).map((c, i) => <Cloud key={i} {...c} color={color} opacity={heavy ? 0.95 : 0.85} />)}
 
@@ -148,17 +149,19 @@ export const WindowWeather = memo(function WindowWeather({ phase, sky, layout }:
  * Ночью — тёмная виньетка с «пятном» света под лампой; в пасмурную/дождливую погоду днём — лёгкая серость.
  */
 export const RoomLighting = memo(function RoomLighting({ phase, sky, layout }: { phase: RoomPhase; sky: SkyCondition; layout: RoomLayout }) {
-  const lampX = 300 + layout.centerShift
+  const lampX = LAMP_X + layout.centerShift
   const lampY = layout.floorTop - 30
   const gloom = (isOvercast(sky) || hasPrecipitation(sky)) && (phase === 'morning' || phase === 'day')
 
   // Градиенты не анимируются transition'ом, поэтому каждая фаза — свой постоянный слой,
   // а смена фазы — плавный кроссфейд opacity за 3 с (композиция на GPU, без перерисовки)
+  // База комнаты светлая: утро и день — свет из окна (тёплый / нейтральный), без затемнения;
+  // вечер и ночь — уютный полумрак плотнее прежнего, со светлым пятном под лампой
   const phaseLayers: Record<RoomPhase, string | null> = {
-    morning: 'linear-gradient(100deg, rgba(255,196,150,0.14), rgba(255,196,150,0.02) 60%)',
-    day: null,
-    evening: `radial-gradient(ellipse 210px 230px at ${lampX}px ${lampY}px, rgba(255,170,90,0.10), rgba(45,18,30,0.32) 90%)`,
-    night: `radial-gradient(ellipse 150px 200px at ${lampX}px ${lampY}px, rgba(255,196,110,0.07), rgba(5,7,18,0.58) 85%)`,
+    morning: 'linear-gradient(100deg, rgba(255,214,170,0.24), rgba(255,214,170,0.05) 65%)',
+    day: 'linear-gradient(100deg, rgba(255,255,240,0.14), rgba(255,255,240,0) 60%)',
+    evening: `radial-gradient(ellipse 220px 240px at ${lampX}px ${lampY}px, rgba(255,170,90,0.12), rgba(58,28,48,0.52) 90%)`,
+    night: `radial-gradient(ellipse 160px 210px at ${lampX}px ${lampY}px, rgba(255,196,110,0.10), rgba(8,10,24,0.80) 85%)`,
   }
 
   return (
@@ -172,7 +175,7 @@ export const RoomLighting = memo(function RoomLighting({ phase, sky, layout }: {
           />
         ) : null,
       )}
-      <div className="absolute inset-0" style={{ background: 'rgba(30,40,55,0.14)', opacity: gloom ? 1 : 0, transition: 'opacity 3s ease-in-out' }} />
+      <div className="absolute inset-0" style={{ background: 'rgba(70,80,95,0.16)', opacity: gloom ? 1 : 0, transition: 'opacity 3s ease-in-out' }} />
     </div>
   )
 })

@@ -59,7 +59,7 @@ export default {
         },
         twinkle: { '0%, 100%': { opacity: '0.25' }, '50%': { opacity: '1' } },
         // Погода за окном комнаты кота (RoomAtmosphere.tsx) — только transform/opacity
-        'cloud-drift': { from: { transform: 'translate3d(-90px, 0, 0)' }, to: { transform: 'translate3d(150px, 0, 0)' } },
+        'cloud-drift': { from: { transform: 'translate3d(-130px, 0, 0)' }, to: { transform: 'translate3d(240px, 0, 0)' } },
         'precip-fall': { from: { transform: 'translate3d(0, 0, 0)' }, to: { transform: 'translate3d(var(--dx), var(--dy), 0)' } },
         'snow-sway': { '0%, 100%': { transform: 'translate3d(-5px, 0, 0)' }, '50%': { transform: 'translate3d(5px, 0, 0)' } },
         lightning: { '0%, 90%, 92.5%, 95.5%, 100%': { opacity: '0' }, '91%': { opacity: '0.75' }, '94%': { opacity: '0.45' } },
