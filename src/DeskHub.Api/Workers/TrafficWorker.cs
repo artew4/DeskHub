@@ -1,5 +1,6 @@
 using DeskHub.Api.Hubs;
 using DeskHub.Api.Models;
+using DeskHub.Api.Services.Power;
 using DeskHub.Api.Services.Traffic;
 using Microsoft.Extensions.Options;
 
@@ -19,6 +20,7 @@ public sealed class TrafficWorker(
     ITrafficProvider provider,
     DashboardNotifier notifier,
     TrafficActivityTracker activity,
+    PowerModeService power,
     TimeProvider time,
     IOptions<TrafficOptions> options,
     ILogger<TrafficWorker> logger) : BackgroundService
@@ -40,12 +42,15 @@ public sealed class TrafficWorker(
         while (!stoppingToken.IsCancellationRequested)
         {
             // ─── Спящий режим ───
-            if (activity.IsIdle(time.GetUtcNow()))
+            // Спим, если виджет не виден 10 мин ИЛИ режим питания Sleep (01:30–08:00, экран чёрный)
+            var powerSleep = activity.HasFetched && power.IsSleeping; // первый запрос после старта — всегда
+            if (powerSleep || activity.IsIdle(time.GetUtcNow()))
             {
                 if (!activity.IsSleeping)
                 {
                     activity.SetSleeping(true);
-                    logger.LogInformation("TrafficWorker is sleeping... (traffic widget not visible for {Minutes} min)",
+                    if (powerSleep) logger.LogInformation("TrafficWorker is sleeping... (power mode Sleep)");
+                    else logger.LogInformation("TrafficWorker is sleeping... (traffic widget not visible for {Minutes} min)",
                         activity.IdleAfter.TotalMinutes);
                 }
                 try { await activity.WaitAsync(SleepCheck, stoppingToken); }

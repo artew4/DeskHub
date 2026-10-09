@@ -1,6 +1,6 @@
 import { HttpTransportType, HubConnectionBuilder, HubConnectionState, LogLevel } from '@microsoft/signalr'
 import { useDashboardStore, type ConnectionStatus } from '../store/useDashboardStore'
-import type { CalendarModel, DashboardSnapshot, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
+import type { CalendarModel, DashboardSnapshot, PowerModeModel, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
 
 // Имена событий — зеркало src/DeskHub.Api/Hubs/HubEvents.cs
 export const HubEvents = {
@@ -8,6 +8,7 @@ export const HubEvents = {
   TrafficUpdated: 'TrafficUpdated',
   TelemetryTick: 'TelemetryTick',
   CalendarUpdated: 'CalendarUpdated',
+  PowerModeChanged: 'PowerModeChanged',
 } as const
 
 const HUB_URL = '/hubs/dashboard'
@@ -61,6 +62,7 @@ async function loadSnapshot(): Promise<void> {
 function bindEvents(): void {
   connection.on(HubEvents.WeatherUpdated, (weather: WeatherModel) => store().setWeather(weather))
   connection.on(HubEvents.TrafficUpdated, (traffic: TrafficModel) => store().setTraffic(traffic))
+  connection.on(HubEvents.PowerModeChanged, (power: PowerModeModel) => store().setPowerMode(power.mode))
   connection.on(HubEvents.CalendarUpdated, (calendar: CalendarModel) => store().setCalendar(calendar))
   connection.on(HubEvents.TelemetryTick, (telemetry: TelemetryModel) => store().setTelemetry(telemetry))
 
@@ -98,6 +100,7 @@ async function startWithRetry(attempt = 0): Promise<void> {
 export const HubMethods = {
   ReportTrafficVisible: 'ReportTrafficVisible',
   ForceTrafficRefresh: 'ForceTrafficRefresh',
+  WakeScreen: 'WakeScreen',
 } as const
 
 /** Вызов без ожидания результата; без связи — тихо пропускается (после реконнекта эффект видимости повторит пинг). */
@@ -111,6 +114,9 @@ export const reportTrafficVisible = (): void => invokeIfConnected(HubMethods.Rep
 
 /** Данные пробок устарели — попросить сервер обновить сейчас (сервер ограничивает частоту). */
 export const forceTrafficRefresh = (): void => invokeIfConnected(HubMethods.ForceTrafficRefresh)
+
+/** Касание чёрного экрана ночью: сервер переводит Sleep → Dimmed на 5 минут (PowerModeChanged придёт следом). */
+export const wakeScreen = (): void => invokeIfConnected(HubMethods.WakeScreen)
 
 let started = false
 

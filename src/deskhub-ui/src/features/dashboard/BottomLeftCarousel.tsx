@@ -60,7 +60,8 @@ export function BottomLeftCarousel() {
   // Пробки действительно видны: открыты в ячейке, активен главный экран и есть связь с сервером
   const onMainScreen = useDashboardStore((s) => s.activeScreenIndex === MAIN_SCREEN)
   const isConnected = useDashboardStore((s) => s.isConnected)
-  const trafficVisible = shown === 'traffic' && onMainScreen && isConnected
+  const screenAwake = useDashboardStore((s) => s.powerMode !== 'sleep')
+  const trafficVisible = shown === 'traffic' && onMainScreen && isConnected && screenAwake
 
   const shownRef = useRef<Slide>(defaultSlide)
   const defaultRef = useRef<Slide>(defaultSlide)

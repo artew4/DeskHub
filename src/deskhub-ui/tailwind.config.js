@@ -3,10 +3,20 @@ export default {
   content: ['./index.html', './src/**/*.{ts,tsx}'],
   theme: {
     extend: {
-      // Дизайн-токены: knowledge/Frontend_react/Core.md, раздел 4.3
+      // Дизайн-токены: knowledge/Frontend_react/Core.md, раздел 4.3.
+      // surface/fg берутся из CSS-переменных темы (src/index.css: .theme-morning / -day / -evening / -night);
+      // формат «R G B» сохраняет модификатор прозрачности (bg-surface-2/50).
       colors: {
-        surface: { 0: '#0B0D10', 1: '#14171C', 2: '#1C2027' },
-        fg: { primary: '#F2F4F7', secondary: '#A0A7B4', muted: '#5C6370' },
+        surface: {
+          0: 'rgb(var(--bg-main) / <alpha-value>)',
+          1: 'rgb(var(--bg-card) / <alpha-value>)',
+          2: 'rgb(var(--bg-elevated) / <alpha-value>)',
+        },
+        fg: {
+          primary: 'rgb(var(--text-primary) / <alpha-value>)',
+          secondary: 'rgb(var(--text-secondary) / <alpha-value>)',
+          muted: 'rgb(var(--text-muted) / <alpha-value>)',
+        },
         status: { ok: '#22C55E', warn: '#F59E0B', bad: '#EF4444', critical: '#B91C1C', info: '#38BDF8' },
       },
       fontFamily: {
@@ -74,5 +84,8 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    // light: — для светлых тем (утро, день): например, затемнить жёлтое солнце, невидимое на белом
+    ({ addVariant }) => addVariant('light', ':is(.theme-morning, .theme-day) &:not(:where(.theme-locked, .theme-locked *))'),
+  ],
 }

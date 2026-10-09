@@ -4,6 +4,7 @@ using System.Text.Json.Serialization;
 using DeskHub.Api.Hubs;
 using DeskHub.Api.Services;
 using DeskHub.Api.Services.Calendar;
+using DeskHub.Api.Services.Power;
 using DeskHub.Api.Services.Telemetry;
 using DeskHub.Api.Services.Traffic;
 using DeskHub.Api.Services.Weather;
@@ -31,6 +32,11 @@ builder.Services
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<DashboardState>();
 builder.Services.AddSingleton<DashboardNotifier>();
+
+// --- Режим питания экрана (Normal / Dimmed / Sleep по МСК); регистрируется раньше воркеров — они спрашивают IsSleeping ---
+builder.Services.AddOptions<PowerOptions>().BindConfiguration(PowerOptions.SectionName).ValidateDataAnnotations().ValidateOnStart();
+builder.Services.AddSingleton<PowerModeService>();
+builder.Services.AddHostedService(sp => sp.GetRequiredService<PowerModeService>());
 
 // --- Телеметрия: реальные метрики на Linux (Raspberry Pi), мок на macOS/Windows ---
 builder.Services.AddOptions<TelemetryOptions>()

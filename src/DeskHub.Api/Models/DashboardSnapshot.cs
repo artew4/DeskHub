@@ -8,6 +8,7 @@ namespace DeskHub.Api.Models;
 /// <param name="Traffic">Поездка и варианты маршрута; null, если данных ещё нет.</param>
 /// <param name="Telemetry">Последний замер телеметрии; null, если данных ещё нет.</param>
 /// <param name="Calendar">События календаря; null, если календарь не подключён или ещё не загружен.</param>
+/// <param name="PowerMode">Режим питания экрана (normal / dimmed / sleep).</param>
 /// <param name="InstanceId">Идентификатор запуска бэкенда (новый при каждом старте процесса/контейнера).
 /// Клиент, увидев другой InstanceId после переподключения, перезагружает страницу — так в киоск попадает новый фронтенд после деплоя.</param>
 /// <param name="ServerTime">Время сервера — клиент сверяет с локальными часами.</param>
@@ -16,5 +17,6 @@ public sealed record DashboardSnapshot(
     TrafficModel? Traffic,
     TelemetryModel? Telemetry,
     CalendarModel? Calendar,
+    PowerMode PowerMode,
     string InstanceId,
     DateTimeOffset ServerTime);

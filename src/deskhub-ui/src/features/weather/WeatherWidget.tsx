@@ -79,13 +79,13 @@ function WeatherContent({ weather, now }: { weather: WeatherModel; now: Date }) 
             ощущается <span className="tabular-nums text-fg-primary">{formatTemperature(weather.apparentTemperature)}</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <Droplets className="size-4 text-sky-400" aria-hidden />
+            <Droplets className="size-4 text-sky-400 light:text-sky-600" aria-hidden />
             <span className="tabular-nums text-fg-primary">{formatPrecipitation(weather.precipitation)}</span>
           </div>
           {/* УФ ночью всегда 0 — не показываем */}
           {weather.isDay && (
             <div className="flex items-center gap-1.5">
-              <Sun className="size-4 text-amber-300" aria-hidden />
+              <Sun className="size-4 text-amber-300 light:text-amber-500" aria-hidden />
               <span>
                 УФ <span className={`font-semibold tabular-nums ${uv.className}`}>{Math.round(weather.uvIndex)}</span>
               </span>
@@ -118,7 +118,7 @@ function HourItem({ hour }: { hour: HourlyForecast }) {
       <WeatherIcon icon={hour.icon} className="size-6" strokeWidth={1.75} />
       <span className="text-base font-semibold tabular-nums">{formatTemperature(hour.temperature)}</span>
       {/* Место под вероятность осадков резервируется всегда, чтобы строки не прыгали */}
-      <span className="h-3 text-[11px] leading-3 tabular-nums text-sky-400">
+      <span className="h-3 text-[11px] leading-3 tabular-nums text-sky-400 light:text-sky-600">
         {hour.precipitationProbability >= 30 ? `${hour.precipitationProbability}%` : ''}
       </span>
     </li>

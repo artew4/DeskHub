@@ -7,4 +7,5 @@ public static class HubEvents
     public const string TrafficUpdated = nameof(TrafficUpdated);
     public const string TelemetryTick = nameof(TelemetryTick);
     public const string CalendarUpdated = nameof(CalendarUpdated);
+    public const string PowerModeChanged = nameof(PowerModeChanged);
 }

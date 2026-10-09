@@ -25,7 +25,11 @@ export const TamagotchiWidget = memo(function TamagotchiWidget() {
   useLayoutEffect(() => {
     const el = containerRef.current
     if (!el) return
-    const measure = () => setSize({ width: Math.round(el.clientWidth), height: Math.round(el.clientHeight) })
+    const measure = () => {
+      // Скрытый экран (display: none в режиме sleep) даёт 0×0 — не пересоздавать комнату и «мозг» кота
+      if (el.clientWidth === 0 || el.clientHeight === 0) return
+      setSize({ width: Math.round(el.clientWidth), height: Math.round(el.clientHeight) })
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(el)
@@ -33,7 +37,8 @@ export const TamagotchiWidget = memo(function TamagotchiWidget() {
   }, [])
 
   return (
-    <section ref={containerRef} className="relative h-full overflow-hidden rounded-card bg-surface-1 p-0">
+    // theme-locked — исходная тёмная палитра: темы по времени суток кота не касаются
+    <section ref={containerRef} className="theme-locked relative h-full overflow-hidden rounded-card bg-surface-1 p-0">
       {/* key: новый размер — новый «мозг» с якорями под эту комнату */}
       {size && <CatRoom key={`${size.width}x${size.height}`} width={size.width} height={size.height} />}
     </section>

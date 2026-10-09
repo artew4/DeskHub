@@ -409,3 +409,24 @@ public sealed class LinuxTelemetryReader(IOptions<TelemetryOptions> opt) : ITele
 ### 8.4. Контракт
 
 `CalendarEventModel { title, startTime, endTime, isAllDay, location, color }` (время — ISO со смещением пояса устройства, `color` — #RRGGBB календаря), `CalendarModel { events, rangeStart, rangeEnd, updatedAt }`; событие хаба `CalendarUpdated`; в snapshot — поле `calendar` (`null`, если не подключён или ещё не загружен).
+
+---
+
+## 9. PowerModeService — режим питания экрана
+
+`Services/Power/PowerModeService.cs` (singleton + `IHostedService`, регистрируется раньше воркеров), `PowerOptions` (секция `Power`), модель `Models/PowerModeModel.cs`.
+
+| Режим | По умолчанию (МСК, `Power:TimeZone`) | Настройки |
+|---|---|---|
+| `Normal` | 08:00–00:00 | `Power:NormalFrom` |
+| `Dimmed` | 00:00–01:30 | `Power:DimFrom` |
+| `Sleep` | 01:30–08:00 | `Power:SleepFrom` |
+
+- **`Current` вычисляется на лету** из часов (`TimeProvider`) и поля `_wakeUntil` (под `Lock`): воркеры просто спрашивают `power.IsSleeping` и всегда получают точный ответ.
+- **Уведомление клиентов без опроса:** один таймер `time.CreateTimer` взводится ровно на ближайшую возможную смену режима — границу расписания (00:00 / 01:30 / 08:00) или конец временного пробуждения. При срабатывании режим пересчитывается; если он сменился — `DashboardState.SetPowerMode` и рассылка `PowerModeChanged(PowerModeModel { mode, wakeUntil, changedAt })`; таймер взводится на следующую смену.
+- **Временное пробуждение** — метод хаба `WakeScreen()` → `WakeTemporarily()`: только если по расписанию `Sleep` и пробуждение ещё не идёт — `_wakeUntil = now + Power:WakeMinutes` (5); режим сразу `Dimmed` (рассылка), таймер взводится на `_wakeUntil` → ровно через 5 мин снова `Sleep`. Повторные касания во время пробуждения его не продлевают (слой затемнения пропускает касания к интерфейсу, `WakeScreen` вызывается только с чёрного экрана).
+- **Воркеры в режиме Sleep** (`power.IsSleeping`):
+  - `WeatherWorker`, `CalendarWorker` — пропускают обновление и проверяют режим раз в минуту (`Task.Delay(1 мин)`), поэтому утром или после касания экрана данные обновляются в течение минуты; в лог — один раз «power mode Sleep — skipping updates» и «resuming».
+  - `TrafficWorker` — режим Sleep — ещё одна причина его «спящего режима» (наравне с невидимостью виджета 10 мин): «TrafficWorker is sleeping... (power mode Sleep)».
+  - **Первая загрузка после старта выполняется всегда**, даже ночью — иначе после перезапуска контейнера ночью (деплой, отключение питания) при пробуждении экрана не было бы ни погоды, ни календаря («Календарь не подключён»). Проверено: старт в Sleep → погода, календарь и пробки загружены один раз, далее пропуск.
+  - `TelemetryWorker` не затронут: он читает локальные `/proc` и `/sys`, в сеть не ходит.

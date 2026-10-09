@@ -57,6 +57,8 @@ src/deskhub-ui/
 | `src/store/useDashboardStore.ts` | Единый Zustand-стор: `weather`, `traffic`, `telemetry`, `calendar`, `connectionStatus`, `isConnected`, `activeScreenIndex` + экшены `setWeather/setTraffic/setTelemetry/applySnapshot/setConnectionStatus`, навигация `setScreen/nextScreen/prevScreen/registerActivity` и таймер автовозврата (30 с) | `shared/store/` + слайсы фич |
 | `src/services/signalrConnection.ts` | Singleton `HubConnection`, `HubEvents`, `HubMethods` + `reportTrafficVisible()` / `forceTrafficRefresh()` (вызовы хаба без ожидания, только при связи), бесконечный реконнект, загрузка snapshot, привязка событий к стору; `startDashboardConnection()` | `shared/api/signalr/` |
 | `src/App.tsx` | Корень 1024×600 (без отступа — `p-4` внутри экранов), `ScreenCarousel` с `MainScreen` + `SystemScreen`; вызывает `startDashboardConnection()` в `useEffect` (идемпотентно — безопасно в StrictMode) | `app/App.tsx` |
+| `src/theme/useTimeTheme.ts` | Тема по времени суток: класс `theme-morning/day/evening/night` на `<html>` (`Feature_Dashboard.md`, 10.1) | на месте |
+| `src/components/PowerOverlay.tsx` | Слой `z-[999]` по режиму питания: `dimmed` — `bg-black/50`, `sleep` — чёрный экран, касание → `WakeScreen` (10.2) | на месте |
 | `src/components/WidgetBoundary.tsx` | Error boundary вокруг каждого виджета (главный и системный экраны, оба слоя мини-карусели): ошибка рендера показывает в ячейке заглушку «Виджет временно недоступен», остальной дашборд работает; повторная попытка через 30 с | `shared/ui/` |
 | `src/components/ScreenCarousel.tsx` | Карусель экранов: CSS `translate3d` + Pointer Events, свайп за пальцем через ref, порог 100 px, индикатор экранов (`Feature_Dashboard.md`, 8.2) | `app/` |
 | `src/features/dashboard/MainScreen.tsx` | Главный экран, сетка 12×6 (`gap-3 p-4`): часы (кол. 1–7, стр. 1–3), мини-карусель «пробки ↔ кот» (кол. 1–7, стр. 4–6), погода (кол. 8–12, стр. 1–3), календарь (кол. 8–12, стр. 4–6) | на месте |
@@ -186,6 +188,8 @@ interface DataSlice<T> {
 - Конфигурация раскладки — декларативный массив в `features/dashboard/layout.ts` (см. `Feature_Dashboard.md`).
 
 ### 4.3. Дизайн-токены (`tailwind.config.js`)
+
+> **Сейчас:** `surface-*` и `fg-*` — не hex, а CSS-переменные темы (`rgb(var(--bg-card) / <alpha-value>)`), значения — в `src/index.css` для каждой темы (`Feature_Dashboard.md`, раздел 10.1). Пример ниже — исходная тёмная палитра (она же `:root` и `.theme-locked`).
 
 ```ts
 theme: {

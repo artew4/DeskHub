@@ -16,11 +16,14 @@ public sealed class DashboardState(TimeProvider time)
     private volatile TrafficModel? _traffic;
     private volatile TelemetryModel? _telemetry;
     private volatile CalendarModel? _calendar;
+    private volatile PowerModeModel _power = new(PowerMode.Normal, null, time.GetUtcNow());
 
     public void SetWeather(WeatherModel weather) => _weather = weather;
     public void SetTraffic(TrafficModel traffic) => _traffic = traffic;
     public void SetTelemetry(TelemetryModel telemetry) => _telemetry = telemetry;
     public void SetCalendar(CalendarModel calendar) => _calendar = calendar;
+    public void SetPowerMode(PowerModeModel power) => _power = power;
+    public PowerMode PowerMode => _power.Mode;
 
-    public DashboardSnapshot GetSnapshot() => new(_weather, _traffic, _telemetry, _calendar, InstanceId, time.GetUtcNow());
+    public DashboardSnapshot GetSnapshot() => new(_weather, _traffic, _telemetry, _calendar, _power.Mode, InstanceId, time.GetUtcNow());
 }

@@ -74,11 +74,22 @@ export interface CalendarModel {
   updatedAt: string
 }
 
+/** Режим питания экрана: normal 08–00, dimmed 00–01:30 (и временное пробуждение ночью), sleep 01:30–08 */
+export type PowerMode = 'normal' | 'dimmed' | 'sleep'
+
+export interface PowerModeModel {
+  mode: PowerMode
+  /** Конец временного пробуждения (WakeScreen ночью), иначе null */
+  wakeUntil: string | null
+  changedAt: string
+}
+
 export interface DashboardSnapshot {
   weather: WeatherModel | null
   traffic: TrafficModel | null
   telemetry: TelemetryModel | null
   calendar: CalendarModel | null
+  powerMode: PowerMode
   /** Идентификатор запуска бэкенда — новый после каждого перезапуска/деплоя контейнера */
   instanceId: string
   serverTime: string

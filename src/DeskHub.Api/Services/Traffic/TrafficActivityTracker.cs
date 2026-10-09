@@ -25,6 +25,8 @@ public sealed class TrafficActivityTracker(TimeProvider time, IOptions<TrafficOp
 
     public DateTimeOffset LastTrafficActivity => new(Interlocked.Read(ref _lastActivityTicks), TimeSpan.Zero);
     public bool IsSleeping => _sleeping;
+    /// <summary>Был ли хотя бы один запрос к провайдеру после старта.</summary>
+    public bool HasFetched => Interlocked.Read(ref _lastFetchTicks) != 0;
 
     /// <summary>Виджет пробок на экране — продлить «бодрствование»; спящий воркер будится сразу.</summary>
     public void ReportVisible()

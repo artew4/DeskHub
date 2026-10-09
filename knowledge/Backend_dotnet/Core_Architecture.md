@@ -148,6 +148,7 @@ public static class HubEvents          // зеркало HubEvents в src/deskhu
 | Метод (клиент → сервер) | Что делает |
 |---|---|
 | `ReportTrafficVisible()` | Виджет пробок на экране: обновляет `LastTrafficActivity` в `TrafficActivityTracker`; спящий `TrafficWorker` просыпается сразу |
+| `WakeScreen()` | Касание чёрного экрана ночью: режим питания `Sleep` → `Dimmed` на 5 мин (`PowerModeService`, `Background_Workers.md`, раздел 9); возвращает `PowerModeModel` |
 | `ForceTrafficRefresh()` | Данные пробок устарели: будит воркер (и во сне, и в паузе между запросами), не чаще раза в минуту |
 
   Подробности — `Background_Workers.md`, раздел 4 («Спящий режим»). Команды, меняющие данные, по-прежнему через REST.

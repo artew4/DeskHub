@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using DeskHub.Api.Hubs;
+using DeskHub.Api.Services.Power;
 using DeskHub.Api.Services.Weather;
 using Microsoft.Extensions.Options;
 
@@ -16,9 +17,12 @@ public sealed class WeatherWorker(
     DashboardNotifier notifier,
     TimeProvider time,
     IOptions<WeatherOptions> options,
+    PowerModeService power,
     ILogger<WeatherWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan FirstRetryDelay = TimeSpan.FromMinutes(1);
+    /// <summary>Как часто спящий (режим питания Sleep) воркер проверяет, не наступило ли утро.</summary>
+    private static readonly TimeSpan SleepCheck = TimeSpan.FromMinutes(1);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -30,11 +34,25 @@ public sealed class WeatherWorker(
         logger.LogInformation("WeatherWorker started: wttr.in/{City} ({Location}, tz {TimeZone}), interval {Interval}",
             settings.City, settings.LocationName, tz.Id, interval);
 
+        var skipping = false;
+        var hasData = false; // первая загрузка после старта — всегда, даже ночью (иначе при пробуждении экрана пусто)
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Режим питания Sleep (01:30–08:00): в сеть не ходим; проверка раз в минуту — утром данные свежие за ≤ 1 мин
+            if (hasData && power.IsSleeping)
+            {
+                if (!skipping) logger.LogInformation("WeatherWorker: power mode Sleep — skipping updates");
+                skipping = true;
+                try { await Task.Delay(SleepCheck, time, stoppingToken); } catch (OperationCanceledException) { break; }
+                continue;
+            }
+            if (skipping) logger.LogInformation("WeatherWorker: power mode {Mode} — resuming", power.Current);
+            skipping = false;
+
             try
             {
                 await RefreshAsync(settings, tz, stoppingToken);
+                hasData = true;
                 if (failures > 0) logger.LogInformation("Weather refresh recovered after {Failures} failures", failures);
                 failures = 0;
             }

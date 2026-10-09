@@ -123,10 +123,10 @@ export interface UvCategory {
 export function uvCategory(uv: number): UvCategory {
   const value = Math.round(uv)
   if (value <= 2) return { label: 'Низкий', className: 'text-status-ok' }
-  if (value <= 5) return { label: 'Умеренный', className: 'text-yellow-300' }
+  if (value <= 5) return { label: 'Умеренный', className: 'text-yellow-300 light:text-yellow-600' }
   if (value <= 7) return { label: 'Высокий', className: 'text-status-warn' }
   if (value <= 10) return { label: 'Очень высокий', className: 'text-status-bad' }
-  return { label: 'Экстремальный', className: 'text-violet-400' }
+  return { label: 'Экстремальный', className: 'text-violet-400 light:text-violet-600' }
 }
 
 /** 0.0 → «0 мм», 0.4 → «0.4 мм», 3.25 → «3.3 мм». */

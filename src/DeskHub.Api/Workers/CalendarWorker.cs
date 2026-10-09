@@ -1,6 +1,7 @@
 using DeskHub.Api.Hubs;
 using DeskHub.Api.Models;
 using DeskHub.Api.Services.Calendar;
+using DeskHub.Api.Services.Power;
 using Microsoft.Extensions.Options;
 
 namespace DeskHub.Api.Workers;
@@ -18,10 +19,13 @@ public sealed class CalendarWorker(
     DashboardNotifier notifier,
     TimeProvider time,
     IOptions<CalendarOptions> options,
+    PowerModeService power,
     ILogger<CalendarWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMinutes(2);
     private static readonly TimeSpan CacheMaxAge = TimeSpan.FromHours(6);
+    /// <summary>Как часто спящий (режим питания Sleep) воркер проверяет, не наступило ли утро.</summary>
+    private static readonly TimeSpan SleepCheck = TimeSpan.FromMinutes(1);
 
     /// <summary>Последний успешный результат по каждому источнику (индекс в Sources).</summary>
     private readonly Dictionary<int, (DateTimeOffset LoadedAt, List<CalendarEventModel> Events)> _lastGood = [];
@@ -50,8 +54,20 @@ public sealed class CalendarWorker(
         logger.LogInformation("CalendarWorker started: {Count} sources ({Sources}), every {Interval}, tz {TimeZone}",
             sources.Count, string.Join(", ", sources), interval, tz.Id);
 
+        var skipping = false;
         while (!stoppingToken.IsCancellationRequested)
         {
+            // Режим питания Sleep (01:30–08:00): календари не скачиваем — кроме первой загрузки после старта
+            if (_lastGood.Count > 0 && power.IsSleeping)
+            {
+                if (!skipping) logger.LogInformation("CalendarWorker: power mode Sleep — skipping updates");
+                skipping = true;
+                try { await Task.Delay(SleepCheck, time, stoppingToken); } catch (OperationCanceledException) { break; }
+                continue;
+            }
+            if (skipping) logger.LogInformation("CalendarWorker: power mode {Mode} — resuming", power.Current);
+            skipping = false;
+
             var allFresh = await RefreshAsync(sources, settings, tz, stoppingToken);
 
             try { await Task.Delay(allFresh ? interval : RetryDelay, time, stoppingToken); }

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CalendarModel, DashboardSnapshot, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
+import type { CalendarModel, DashboardSnapshot, PowerMode, TelemetryModel, TrafficModel, WeatherModel } from '../types/dashboard'
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected'
 
@@ -17,6 +17,7 @@ interface DashboardState {
   serverTime: string | null
   /** InstanceId бэкенда из первого снимка; другой id в следующем снимке — бэкенд перезапущен */
   instanceId: string | null
+  powerMode: PowerMode
 
   connectionStatus: ConnectionStatus
   isConnected: boolean
@@ -27,6 +28,7 @@ interface DashboardState {
   setTraffic: (traffic: TrafficModel) => void
   setTelemetry: (telemetry: TelemetryModel) => void
   setCalendar: (calendar: CalendarModel) => void
+  setPowerMode: (mode: PowerMode) => void
   applySnapshot: (snapshot: DashboardSnapshot) => void
   setConnectionStatus: (status: ConnectionStatus) => void
 
@@ -92,6 +94,7 @@ export const useDashboardStore = create<DashboardState>()((set, get) => ({
   telemetry: null,
   calendar: null,
   instanceId: null,
+  powerMode: 'normal',
   serverTime: null,
 
   connectionStatus: 'connecting',
@@ -101,6 +104,7 @@ export const useDashboardStore = create<DashboardState>()((set, get) => ({
   setTraffic: (traffic) => set((s) => (acceptTraffic(traffic, s.traffic) ? { traffic } : s)),
   setTelemetry: (telemetry) => set((s) => (acceptTelemetry(telemetry, s.telemetry) ? { telemetry } : s)),
   setCalendar: (calendar) => set((s) => (acceptCalendar(calendar, s.calendar) ? { calendar } : s)),
+  setPowerMode: (powerMode) => set({ powerMode }),
 
   // Каждая часть snapshot проходит ту же проверку свежести, что и push-события
   applySnapshot: (snapshot) => {
@@ -111,7 +115,7 @@ export const useDashboardStore = create<DashboardState>()((set, get) => ({
       reloadForNewInstance(knownInstance, snapshot.instanceId)
       return
     }
-    const { weather, traffic, telemetry, calendar, serverTime, instanceId } = snapshot
+    const { weather, traffic, telemetry, calendar, serverTime, instanceId, powerMode } = snapshot
     set((s) => ({
       weather: acceptWeather(weather, s.weather) ? weather : s.weather,
       traffic: acceptTraffic(traffic, s.traffic) ? traffic : s.traffic,
@@ -119,6 +123,7 @@ export const useDashboardStore = create<DashboardState>()((set, get) => ({
       calendar: acceptCalendar(calendar, s.calendar) ? calendar : s.calendar,
       serverTime,
       instanceId,
+      powerMode: powerMode ?? s.powerMode,
     }))
   },
 

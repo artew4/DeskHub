@@ -14,8 +14,64 @@ body,
   overscroll-behavior: none;
 }
 
+/* ─── Темы оформления по времени суток ───────────────────────────────────────
+   Класс темы вешается на <html> хуком useTimeTheme. Значения — каналы RGB («R G B»),
+   их читают токены Tailwind surface-* / fg-* (tailwind.config.js).
+   --bg-main — фон экрана, --bg-card — карточки, --bg-elevated — вложенные плашки, треки, скелетоны. */
+
+/* Исходная тёмная палитра — по умолчанию и для .theme-locked (кот не меняет цвета) */
+:root,
+.theme-locked {
+  --bg-main: 0 0 0;
+  --bg-card: 20 23 28;
+  --bg-elevated: 28 32 39;
+  --text-primary: 242 244 247;
+  --text-secondary: 160 167 180;
+  --text-muted: 92 99 112;
+}
+
+/* Утро 08:00–12:00 — светлый персиковый, мягкий белый */
+.theme-morning {
+  --bg-main: 243 230 218;
+  --bg-card: 255 249 243;
+  --bg-elevated: 245 232 219;
+  --text-primary: 51 36 26;
+  --text-secondary: 122 99 80;
+  --text-muted: 176 152 130;
+}
+
+/* День 12:00–18:00 — светло-серый, белый */
+.theme-day {
+  --bg-main: 228 232 237;
+  --bg-card: 255 255 255;
+  --bg-elevated: 238 241 245;
+  --text-primary: 17 24 39;
+  --text-secondary: 75 85 99;
+  --text-muted: 156 163 175;
+}
+
+/* Вечер 18:00–00:00 — тёплый тёмный, закатный */
+.theme-evening {
+  --bg-main: 18 12 10;
+  --bg-card: 33 23 20;
+  --bg-elevated: 48 33 28;
+  --text-primary: 250 235 222;
+  --text-secondary: 212 168 140;
+  --text-muted: 134 102 84;
+}
+
+/* Ночь 00:00–08:00 — глубокий чёрный, тёмно-синий; текст приглушён, чтобы не слепил */
+.theme-night {
+  --bg-main: 0 0 0;
+  --bg-card: 10 15 30;
+  --bg-elevated: 20 27 46;
+  --text-primary: 196 207 230;
+  --text-secondary: 126 139 168;
+  --text-muted: 74 85 112;
+}
+
 body {
-  background: #000;
+  background: rgb(var(--bg-main));
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;

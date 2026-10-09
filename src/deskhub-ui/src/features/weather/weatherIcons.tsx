@@ -31,17 +31,17 @@ const icons: Record<string, LucideIcon> = {
 }
 
 
-// Цвета иконок: солнце тёплое, осадки холодные, остальное нейтральное
+// Цвета иконок: солнце тёплое, осадки холодные, остальное нейтральное; light: — насыщеннее для светлых тем
 const iconColors: Record<string, string> = {
-  'clear-day': 'text-amber-300',
-  'partly-cloudy-day': 'text-amber-200',
-  'clear-night': 'text-indigo-200',
-  'partly-cloudy-night': 'text-indigo-200',
-  drizzle: 'text-sky-300',
-  rain: 'text-sky-400',
-  sleet: 'text-sky-200',
-  snow: 'text-slate-100',
-  thunderstorm: 'text-violet-300',
+  'clear-day': 'text-amber-300 light:text-amber-500',
+  'partly-cloudy-day': 'text-amber-200 light:text-amber-500',
+  'clear-night': 'text-indigo-200 light:text-indigo-500',
+  'partly-cloudy-night': 'text-indigo-200 light:text-indigo-500',
+  drizzle: 'text-sky-300 light:text-sky-600',
+  rain: 'text-sky-400 light:text-sky-600',
+  sleet: 'text-sky-200 light:text-sky-500',
+  snow: 'text-slate-100 light:text-slate-400',
+  thunderstorm: 'text-violet-300 light:text-violet-600',
 }
 
 const iconColor = (key: string): string => iconColors[key] ?? 'text-fg-secondary'

@@ -30,6 +30,9 @@ public sealed class DashboardNotifier(IHubContext<DashboardHub> hub, DashboardSt
         return hub.Clients.All.SendAsync(HubEvents.CalendarUpdated, calendar, ct);
     }
 
+    public Task SendPowerModeUpdate(PowerModeModel power, CancellationToken ct = default) =>
+        hub.Clients.All.SendAsync(HubEvents.PowerModeChanged, power, ct); // DashboardState обновляет PowerModeService
+
     public Task SendTelemetryUpdate(TelemetryModel telemetry, CancellationToken ct = default)
     {
         state.SetTelemetry(telemetry);

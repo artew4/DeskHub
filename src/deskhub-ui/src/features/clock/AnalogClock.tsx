@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef } from 'react'
+import { useDashboardStore } from '../../store/useDashboardStore'
 import { handAngles } from './clockMath'
 
 /**
@@ -17,7 +18,11 @@ export const AnalogClock = memo(function AnalogClock({ size }: { size: number })
   const minuteRef = useRef<HTMLDivElement>(null)
   const secondRef = useRef<HTMLDivElement>(null)
 
+  // Экран спит (режим питания sleep) — цикл rAF на паузе, при пробуждении стрелки сразу встают на место
+  const asleep = useDashboardStore((s) => s.powerMode === 'sleep')
+
   useEffect(() => {
+    if (asleep) return
     const smooth = !window.matchMedia('(prefers-reduced-motion: reduce)').matches
     let frame = 0
 
@@ -31,7 +36,7 @@ export const AnalogClock = memo(function AnalogClock({ size }: { size: number })
 
     render()
     return () => cancelAnimationFrame(frame)
-  }, [])
+  }, [asleep])
 
   return (
     <div className="relative shrink-0" style={{ width: size, height: size }} aria-hidden>
