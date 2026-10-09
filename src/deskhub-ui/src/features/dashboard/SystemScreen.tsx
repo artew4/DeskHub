@@ -1,4 +1,5 @@
 import { ChevronsRight } from 'lucide-react'
+import { WidgetBoundary } from '../../components/WidgetBoundary'
 import { TelemetryWidget } from '../telemetry/TelemetryWidget'
 
 /**
@@ -16,7 +17,9 @@ export function SystemScreen() {
         </span>
       </header>
       <div style={{ gridColumn: '1 / span 5', gridRow: '2 / span 3' }}>
-        <TelemetryWidget />
+        <WidgetBoundary name="telemetry">
+          <TelemetryWidget />
+        </WidgetBoundary>
       </div>
     </main>
   )

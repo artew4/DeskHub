@@ -19,7 +19,9 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "127.0.0.1:5000:8080"   # только localhost: Kiosk работает на этом же устройстве
+      # Доступен из локальной сети: http://<ip-pi>:5000. Аутентификации нет — только для домашней сети.
+      # DESKHUB_PORT — внешний порт (на Mac 5000 занят AirPlay Receiver: укажите в .env, например, 5050)
+      - "${DESKHUB_PORT:-5000}:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       TZ: ${TZ:-Europe/Moscow}

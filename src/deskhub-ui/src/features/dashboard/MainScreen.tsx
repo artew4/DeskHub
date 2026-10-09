@@ -1,3 +1,4 @@
+import { WidgetBoundary } from '../../components/WidgetBoundary'
 import { CalendarWidget } from '../calendar/CalendarWidget'
 import { ClockWidget } from '../clock/ClockWidget'
 import { WeatherWidget } from '../weather/WeatherWidget'
@@ -13,16 +14,24 @@ export function MainScreen() {
   return (
     <main className="grid h-full grid-cols-12 grid-rows-6 gap-4 p-4">
       <div style={{ gridColumn: '1 / span 7', gridRow: '1 / span 3' }}>
-        <ClockWidget />
+        <WidgetBoundary name="clock">
+          <ClockWidget />
+        </WidgetBoundary>
       </div>
       <div style={{ gridColumn: '1 / span 7', gridRow: '4 / span 3' }}>
-        <BottomLeftCarousel />
+        <WidgetBoundary name="carousel">
+          <BottomLeftCarousel />
+        </WidgetBoundary>
       </div>
       <div style={{ gridColumn: '8 / span 5', gridRow: '1 / span 3' }}>
-        <WeatherWidget />
+        <WidgetBoundary name="weather">
+          <WeatherWidget />
+        </WidgetBoundary>
       </div>
       <div style={{ gridColumn: '8 / span 5', gridRow: '4 / span 3' }}>
-        <CalendarWidget />
+        <WidgetBoundary name="calendar">
+          <CalendarWidget />
+        </WidgetBoundary>
       </div>
     </main>
   )

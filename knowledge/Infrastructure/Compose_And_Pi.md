@@ -51,7 +51,9 @@ services:
       postgres:
         condition: service_healthy
     ports:
-      - "127.0.0.1:5000:8080"   # только localhost: Kiosk работает на этом же устройстве
+      # Доступен из локальной сети: http://<ip-pi>:5000. Аутентификации нет — только для домашней сети.
+      # DESKHUB_PORT — внешний порт (на Mac 5000 занят AirPlay Receiver: укажите в .env, например, 5050)
+      - "${DESKHUB_PORT:-5000}:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       TZ: ${TZ:-Europe/Moscow}
@@ -98,7 +100,7 @@ volumes:
 
 | Элемент | Решение и причина |
 |---|---|
-| **Порт `127.0.0.1:5000:8080`** | API слушает `8080` внутри контейнера, на хосте доступен **только с localhost** — Chromium открывает `http://localhost:5000`. Из LAN API недоступен, поэтому аутентификация не нужна (см. `Backend_dotnet/Core_Architecture.md`, 3.2). |
+| **Порт `${DESKHUB_PORT:-5000}:8080`** | API слушает `8080` внутри контейнера; на хосте — порт 5000 **на всех интерфейсах**: Kiosk открывает `http://localhost:5000`, другие устройства — `http://<ip-pi>:5000`. Аутентификации нет — только для доверенной домашней сети (`Backend_dotnet/Core_Architecture.md`, 3.2). `DESKHUB_PORT` — для локального запуска на Mac, где 5000 занят AirPlay Receiver (`bind: address already in use`). |
 | **БД без `ports`** | PostgreSQL виден только сервису `api` во внутренней сети compose (`Host=postgres`). |
 | **Вольюм `pgdata`** | Именованный вольюм Docker → данные переживают пересоздание контейнера и обновление образа. Хранится в `/var/lib/docker/volumes/deskhub_pgdata`. При наличии NVMe SSD каталог Docker (`data-root`) рекомендуется перенести на SSD. |
 | **`depends_on: service_healthy`** | `api` стартует после готовности сервиса `postgres`; ретраи миграций в коде — вторая линия защиты. |
@@ -115,6 +117,9 @@ volumes:
 # Скопировать в .env и заполнить. Файл .env в git не коммитится.
 
 TZ=Europe/Moscow
+
+# Внешний порт дашборда (по умолчанию 5000). На Mac порт 5000 занят AirPlay Receiver — для локального запуска поставьте, например, 5050
+# DESKHUB_PORT=5000
 
 # --- PostgreSQL ---
 POSTGRES_DB=deskhub

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type PointerEvent } from 'react'
+import { WidgetBoundary } from '../../components/WidgetBoundary'
 import { forceTrafficRefresh, reportTrafficVisible } from '../../services/signalrConnection'
 import { MAIN_SCREEN, useDashboardStore } from '../../store/useDashboardStore'
 import { TamagotchiWidget } from '../tamagotchi/TamagotchiWidget'
@@ -214,7 +215,7 @@ export function BottomLeftCarousel() {
           inert={slide !== shown}
           aria-hidden={slide !== shown}
         >
-          {slide === 'traffic' ? <TrafficWidget /> : <TamagotchiWidget />}
+          <WidgetBoundary name={slide}>{slide === 'traffic' ? <TrafficWidget /> : <TamagotchiWidget />}</WidgetBoundary>
         </div>
       ))}
 

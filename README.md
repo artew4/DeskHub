@@ -73,7 +73,7 @@ docker build --platform linux/arm64 -t artembarabash/deskhub:latest . && docker 
    ./deploy.sh
    ```
 
-5. Проверить:
+5. Проверить (дашборд доступен и с других устройств домашней сети — `http://<ip-pi>:5000`; аутентификации нет, поэтому только для доверенной сети):
 
    ```bash
    docker compose ps                          # api и postgres — healthy
@@ -119,7 +119,7 @@ cd src/DeskHub.Api && dotnet run
 # Frontend с hot reload (http://localhost:5173, /api и /hubs проксируются на :5000)
 cd src/deskhub-ui && npm install && npm run dev
 
-# Всё в Docker локально
-cp .env.example .env   # заполнить
-docker compose up --build
+# Всё в Docker локально (на Mac порт 5000 занят AirPlay Receiver — задайте другой)
+cp .env.example .env   # заполнить, добавить DESKHUB_PORT=5050
+docker compose up --build   # → http://localhost:5050
 ```

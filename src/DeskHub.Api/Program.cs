@@ -52,8 +52,9 @@ builder.Services.AddOptions<OpenMeteoOptions>()
 builder.Services.AddHttpClient(OpenMeteoOptions.HttpClientName, (sp, client) =>
 {
     client.BaseAddress = new Uri(sp.GetRequiredService<IOptions<OpenMeteoOptions>>().Value.BaseUrl);
-    client.Timeout = TimeSpan.FromSeconds(20);
-    client.DefaultRequestHeaders.UserAgent.ParseAdd("DeskHub/1.0");
+    client.Timeout = TimeSpan.FromSeconds(30);
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("DeskHub/1.0 (Raspberry Pi)");
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
 });
 builder.Services.AddHostedService<WeatherWorker>();
 
