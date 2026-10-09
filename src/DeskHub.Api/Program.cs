@@ -44,14 +44,14 @@ else
 
 builder.Services.AddHostedService<TelemetryWorker>();
 
-// --- Погода: Open-Meteo (без ключа) ---
-builder.Services.AddOptions<OpenMeteoOptions>()
-    .BindConfiguration(OpenMeteoOptions.SectionName)
+// --- Погода: wttr.in (без ключа; Open-Meteo/Hetzner заблокирован провайдером в РФ) ---
+builder.Services.AddOptions<WeatherOptions>()
+    .BindConfiguration(WeatherOptions.SectionName)
     .ValidateDataAnnotations()
     .ValidateOnStart();
-builder.Services.AddHttpClient(OpenMeteoOptions.HttpClientName, (sp, client) =>
+builder.Services.AddHttpClient(WeatherOptions.HttpClientName, (sp, client) =>
 {
-    client.BaseAddress = new Uri(sp.GetRequiredService<IOptions<OpenMeteoOptions>>().Value.BaseUrl);
+    client.BaseAddress = new Uri(sp.GetRequiredService<IOptions<WeatherOptions>>().Value.BaseUrl);
     client.Timeout = TimeSpan.FromSeconds(30);
     client.DefaultRequestHeaders.UserAgent.ParseAdd("DeskHub/1.0 (Raspberry Pi)");
     client.DefaultRequestHeaders.Accept.ParseAdd("application/json");

@@ -26,10 +26,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       TZ: ${TZ:-Europe/Moscow}
       ConnectionStrings__DefaultConnection: ${ConnectionStrings__DefaultConnection:?set in .env}
-      OpenMeteo__Latitude: ${OpenMeteo__Latitude:-55.7558}
-      OpenMeteo__Longitude: ${OpenMeteo__Longitude:-37.6173}
-      OpenMeteo__LocationName: ${OpenMeteo__LocationName:-Москва}
-      OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
+      Weather__City: ${Weather__City:-Moscow}             # погода: https://wttr.in/<City>
+      Weather__LocationName: ${Weather__LocationName:-Москва}
       Traffic__Provider: ${Traffic__Provider:-Yandex}   # Yandex | Mock
       Calendar__TimeZone: ${TZ:-Europe/Moscow}
       Telemetry__ProcRoot: /host/proc

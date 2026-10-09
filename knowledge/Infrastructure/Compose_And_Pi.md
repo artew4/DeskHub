@@ -58,10 +58,8 @@ services:
       ASPNETCORE_ENVIRONMENT: Production
       TZ: ${TZ:-Europe/Moscow}
       ConnectionStrings__DefaultConnection: ${ConnectionStrings__DefaultConnection:?set in .env}
-      OpenMeteo__Latitude: ${OpenMeteo__Latitude:-55.7558}
-      OpenMeteo__Longitude: ${OpenMeteo__Longitude:-37.6173}
-      OpenMeteo__LocationName: ${OpenMeteo__LocationName:-Москва}
-      OpenMeteo__IntervalMinutes: ${OpenMeteo__IntervalMinutes:-15}
+      Weather__City: ${Weather__City:-Moscow}             # погода: https://wttr.in/<City>
+      Weather__LocationName: ${Weather__LocationName:-Москва}
       Traffic__Provider: ${Traffic__Provider:-Yandex}   # Yandex | Mock
       Calendar__TimeZone: ${TZ:-Europe/Moscow}
       Telemetry__ProcRoot: /host/proc
@@ -129,11 +127,9 @@ POSTGRES_PASSWORD=change-me
 # Строка подключения API (Host = имя сервиса в docker-compose); пароль должен совпадать с POSTGRES_PASSWORD
 ConnectionStrings__DefaultConnection=Host=postgres;Port=5432;Database=deskhub;Username=deskhub;Password=change-me
 
-# --- Open-Meteo (ключ не нужен) ---
-OpenMeteo__Latitude=55.7558
-OpenMeteo__Longitude=37.6173
-OpenMeteo__LocationName=Москва
-OpenMeteo__IntervalMinutes=15
+# --- Погода: wttr.in (ключ не нужен; Open-Meteo/Hetzner заблокирован провайдером в РФ) ---
+Weather__City=Moscow
+Weather__LocationName=Москва
 
 # --- Календари (iCloud, Outlook, любой публичный .ics) — массив Calendar__Sources__N__Url / __Color ---
 # iCloud: Календарь → «Поделиться» → «Публичный календарь» → webcal://…; Outlook: «Опубликовать календарь» → ссылка .ics.

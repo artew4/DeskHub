@@ -9,7 +9,7 @@
 
 | Воркер | Источник | Интервал | Пишет в БД | SignalR-событие |
 |---|---|---|---|---|
-| `WeatherWorker` | Open-Meteo (HTTPS) | 15 мин | `weather_logs` | `WeatherUpdated` |
+| `WeatherWorker` | wttr.in (HTTPS, JSON `format=j1`) | 15 мин | `weather_logs` (план) | `WeatherUpdated` |
 | `TrafficWorker` | API карт (HTTPS) | 5 мин, в часы пик 2 мин | `traffic_logs` | `TrafficUpdated` |
 | `TelemetryWorker` | `/proc`, `/sys` хоста | 1 с | — (только память) | `TelemetryTick` |
 | `CalendarWorker` | Несколько .ics (iCloud, Outlook) параллельно | 15 мин (сбой — повтор через 2 мин) | — (только память) | `CalendarUpdated` |
@@ -90,6 +90,29 @@ public abstract class PeriodicWorker(ILogger logger, TimeProvider time) : Backgr
 
 ## 3. WeatherWorker
 
+> **Текущая реализация — wttr.in (с 09.10.2026).** Open-Meteo (хостится в Hetzner) недоступен из сети пользователя — провайдер в РФ блокирует дата-центр, отсюда таймауты `HttpClient.Timeout`. Обход блокировок не делаем: провайдер погоды заменён на **wttr.in** (бесплатно, без ключа, работает в РФ). **Фронтенд не менялся**: бэкенд отдаёт ту же `WeatherModel`.
+>
+> - Запрос: `GET https://wttr.in/{Weather:City}?format=j1&lang=ru` (по умолчанию `Moscow`), named `HttpClient` `"Weather"`: таймаут **30 с**, `User-Agent: DeskHub/1.0 (Raspberry Pi)`, `Accept: application/json`. Интервал 15 мин; сбой — `Warning`, повтор через 1, 2, 4 … мин, клиентам ничего не рассылается (в `DashboardState` остаётся прежняя погода или `null`).
+> - Код: `Workers/WeatherWorker.cs` + `Services/Weather/` — `WeatherOptions` (`City`, `LocationName`, `IntervalMinutes`, `TimeZone`, `BaseUrl`), `WttrResponse` (внутренние record'ы; все числа wttr.in присылает **строками** — `JsonNumberHandling.AllowReadingFromString`), `WttrMapper`, `WwoCodes`. Конфигурация: секция `Weather` (`Weather__City`, `Weather__LocationName` в `.env`); ключи `OpenMeteo:*` (координаты) удалены.
+>
+> | Поле `WeatherModel` | Источник wttr.in |
+> |---|---|
+> | `temperature` / `apparentTemperature` | `current_condition[0].temp_C` / `FeelsLikeC` |
+> | `description` | `current_condition[0].lang_ru[0].value` («Пасмурно», «Небольшой дождь»), иначе `weatherDesc[0].value`; первая буква заглавная |
+> | `icon` | код WorldWeatherOnline `current_condition[0].weatherCode` → `WwoCodes`: 113 → `clear-day/night`; 116 → `partly-cloudy-day/night`; 119, 122 → `cloudy`; 143, 248, 260 → `fog`; 176, 263, 266 → `drizzle`; 293–308, 353–359 → `rain`; 182, 185, 281, 284, 311–320, 350, 362, 365, 374, 377 → `sleet`; 179, 227, 230, 323–338, 368, 371 → `snow`; 200, 386–395 → `thunderstorm`; неизвестный → `cloudy`. Ключи иконок — прежний контракт с фронтендом |
+> | `weatherCode` | эквивалентный WMO-код той же категории (0, 2, 3, 45, 51, 61, 66, 71, 95) — смысл поля сохранён (фронтенд его не использует) |
+> | `isDay` | местное время между `weather[сегодня].astronomy[0].sunrise` и `sunset` («06:48 AM»); без астрономии — 07:00–20:00 |
+> | `precipitation` / `uvIndex` | `precipMM` / `uvIndex` |
+> | `hourly[]` | `weather[0..2].hourly[]` — **шаг 3 ч** (`time` = "0", "300" … "2100", местное время города → `DateTimeOffset` по `Weather:TimeZone`), начиная с текущего трёхчасового блока, 16 точек (2 суток); `precipitationProbability` = max(`chanceofrain`, `chanceofsnow`); иконка — по коду часа и восходу/закату его дня |
+> | `locationName` | `Weather:LocationName` |
+>
+> Следствие шага 3 ч: фронтенд (`selectForecast`) выбирает часы из того, что есть, поэтому в режиме «Сегодня» бывает 4 слота вместо 5, а «Вечером» — 2–3 (12:00 → 12, 15, 18, 21). Режим «Завтра» (09, 12, 15, 18, 21) — без изменений.
+>
+> Проверено 09.10.2026: ответ за ~1 с; «13 °C, Пасмурно (cloudy)», день; прогноз — 18:00 `drizzle` 48 %, 21:00 `rain` 40 %, 00:00 `clear-night`; виджет на экране отрисовался без изменений фронтенда.
+>
+> Подразделы 3.1–3.3 ниже описывают прежнюю интеграцию с Open-Meteo (до 09.10.2026) — оставлены как история.
+
+
 ### 3.1. Алгоритм
 
 ```
@@ -104,13 +127,7 @@ public abstract class PeriodicWorker(ILogger logger, TimeProvider time) : Backgr
 
 ### 3.2. Запрос к Open-Meteo
 
-> **Текущая реализация:** `Workers/WeatherWorker.cs` + `Services/Weather/` (`OpenMeteoOptions`, `OpenMeteoResponse`, `OpenMeteoMapper`, `WeatherCodes`). Отличия от описания ниже:
-> - `timezone=auto` (а не `UTC`): локальные времена ответа переводятся в `DateTimeOffset` по `utc_offset_seconds`, в DTO уходят со смещением (`2026-10-07T21:00:00+03:00`).
-> - Поля запроса: `current=temperature_2m,apparent_temperature,weather_code,precipitation,is_day,uv_index`, `hourly=temperature_2m,weather_code,is_day,precipitation_probability`, `forecast_days=2`; `daily` и ветер пока не запрашиваются.
-> - Named `HttpClient` `"OpenMeteo"` (таймаут **30 с**, `User-Agent: DeskHub/1.0 (Raspberry Pi)`, `Accept: application/json`) без `AddStandardResilienceHandler`; вместо него — повтор в самом воркере: 1 → 2 → 4 … мин, но не дольше интервала опроса. Первая итерация — сразу при старте.
-> - Сбой (сеть, таймаут, 5xx, битый JSON) — `Warning` «Weather refresh failed (attempt N)» с исключением, цикл не прерывается, следующая попытка через 1, 2, 4 … мин; клиентам ничего не рассылается — в `DashboardState` остаётся прежняя погода (или `null`, если успешных запросов ещё не было). Проверено эмуляцией недоступного Open-Meteo (немаршрутизируемый адрес): тот же `TaskCanceledException … HttpClient.Timeout of 30 seconds`, попытки 1 и 2, `weather: null` в snapshot, остальной дашборд работает.
-> - В БД (`weather_logs`) пока не пишется — до этапа EF Core; до первого успешного запроса `weather` в snapshot = `null`.
-> - WMO-код → описание и **ключ иконки** (`clear-day`, `clear-night`, `partly-cloudy-day/night`, `cloudy`, `fog`, `drizzle`, `rain`, `sleet`, `snow`, `thunderstorm`) считает бэкенд (`WeatherCodes.cs`); фронтенд только сопоставляет ключ с иконкой lucide.
+> *(Историческое — Open-Meteo, до 09.10.2026.)*
 
 API бесплатный, **без ключа**, лимиты с запасом для одного устройства.
 
@@ -320,7 +337,7 @@ public sealed class LinuxTelemetryReader(IOptions<TelemetryOptions> opt) : ITele
 | Что | Как |
 |---|---|
 | Парсеры `/proc`, `/sys` | Unit-тесты на фикстурах, снятых с реального Pi 5 |
-| Маппинг Open-Meteo | Unit-тест на сохранённом JSON-ответе API |
+| Маппинг wttr.in (`WttrMapper`, `WwoCodes`) | Unit-тест на сохранённом JSON-ответе `format=j1` |
 | `Classify`, baseline, trend | Unit-тесты граничных значений |
 | Цикл воркера | `FakeTimeProvider` (`Microsoft.Extensions.TimeProvider.Testing`): продвижение времени → проверка вызова провайдера и `DashboardNotifier` (мок `IHubContext`) |
 | Отказоустойчивость | Провайдер бросает исключение → воркер продолжает работу, следующая итерация выполняется, хост не падает |

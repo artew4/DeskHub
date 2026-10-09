@@ -72,13 +72,13 @@ PostgreSQL хранит то, что должно **пережить перез�
 
 ### 3.2. `WeatherLog` — лог погоды
 
-Одна строка на каждый успешный опрос Open-Meteo (раз в 10–15 мин → ~100 строк/сутки).
+Одна строка на каждый успешный опрос провайдера погоды (сейчас wttr.in) (раз в 10–15 мин → ~100 строк/сутки).
 
 ```csharp
 public sealed class WeatherLog
 {
     public long Id { get; set; }
-    public DateTimeOffset MeasuredAt { get; set; }      // время данных (current.time из Open-Meteo, UTC)
+    public DateTimeOffset MeasuredAt { get; set; }      // время данных (время наблюдения провайдера, UTC)
     public float TemperatureC { get; set; }
     public float ApparentTemperatureC { get; set; }
     public short WeatherCode { get; set; }              // WMO code
@@ -98,7 +98,7 @@ public sealed record HourlyForecastItem(
 - Текущие показатели — **отдельные колонки** (по ним возможна аналитика: «температура за месяц»).
 - Почасовой прогноз — **`jsonb`** (`.OwnsMany(x => x.HourlyForecast, b => b.ToJson())`): нужен целиком для прогрева снимка, аналитика по нему не требуется.
 - Индекс: `measured_at DESC` — выборка последней записи и диапазонов.
-- Дубликаты: уникальный индекс по `measured_at` — повторный опрос с теми же данными Open-Meteo не создаёт новую строку (воркер делает upsert / проверяет `ON CONFLICT DO NOTHING`).
+- Дубликаты: уникальный индекс по `measured_at` — повторный опрос с теми же данными провайдера погоды не создаёт новую строку (воркер делает upsert / проверяет `ON CONFLICT DO NOTHING`).
 
 ### 3.3. `TrafficLog` — лог времени в пути
 

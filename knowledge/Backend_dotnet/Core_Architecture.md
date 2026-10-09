@@ -45,7 +45,7 @@ DeskHub/                               # корень репозитория
 │   │   └── HubEvents.cs               # имена событий (зеркало фронтенда)
 │   ├── Features/
 │   │   ├── Dashboard/                 # SnapshotEndpoint, DashboardState (in-memory кэш)
-│   │   ├── Weather/                   # WeatherWorker, OpenMeteoClient, DTO, маппинг
+│   │   ├── Weather/                   # WeatherWorker, wttr.in: WttrMapper, WwoCodes, DTO
 │   │   ├── Traffic/                   # TrafficWorker, ITrafficProvider, DTO
 │   │   ├── Telemetry/                 # TelemetryWorker, LinuxTelemetryReader, DTO
 │   │   └── Settings/                  # эндпоинты настроек, SettingsChanged
@@ -265,7 +265,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // --- Options (валидация при старте) ---
 builder.Services.AddOptions<WeatherOptions>()
-    .BindConfiguration("OpenMeteo").ValidateDataAnnotations().ValidateOnStart();
+    .BindConfiguration("Weather").ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<TrafficOptions>()
     .BindConfiguration("Traffic").ValidateDataAnnotations().ValidateOnStart();
 builder.Services.AddOptions<TelemetryOptions>()
@@ -278,8 +278,8 @@ builder.Services.AddDbContext<DeskHubDbContext>(o => o
     .UseSnakeCaseNamingConvention());
 
 // --- HTTP-клиенты внешних API (с ретраями и таймаутами) ---
-builder.Services.AddHttpClient<IOpenMeteoClient, OpenMeteoClient>(c =>
-        c.BaseAddress = new Uri("https://api.open-meteo.com/"))
+builder.Services.AddHttpClient("Weather", c =>          // wttr.in; таймаут 30 с, User-Agent, Accept: application/json
+        c.BaseAddress = new Uri("https://wttr.in/"))
     .AddStandardResilienceHandler();
 builder.Services.AddHttpClient("YandexMaps", …)   // + ITrafficProvider: YandexHtmlTrafficProvider | MockTrafficProvider по Traffic:Provider
     .AddStandardResilienceHandler();
@@ -307,7 +307,7 @@ builder.Services.AddProblemDetails();
 | Сервис | Lifetime | Комментарий |
 |---|---|---|
 | `DeskHubDbContext` | Scoped | В воркерах (singleton) — **только** через `IServiceScopeFactory.CreateAsyncScope()` на каждую итерацию |
-| `OpenMeteoClient`, `ITrafficProvider` | Transient (typed HttpClient) | Внутри — пул `HttpMessageHandler` от `IHttpClientFactory` |
+| HttpClient «Weather», `ITrafficProvider` | Transient (typed HttpClient) | Внутри — пул `HttpMessageHandler` от `IHttpClientFactory` |
 | `DashboardState`, `DashboardNotifier` | Singleton | Общий снимок для всех клиентов |
 | `ITelemetryReader` | Singleton | Хранит предыдущий замер `/proc/stat` для расчёта загрузки CPU |
 | `TimeProvider` | Singleton | Абстракция времени — для тестов воркеров |
@@ -324,7 +324,7 @@ builder.Services.AddProblemDetails();
 ```json
 {
   "ConnectionStrings": { "DefaultConnection": "Host=postgres;Port=5432;Database=deskhub;Username=deskhub;Password=<из env>" },
-  "OpenMeteo": { "Latitude": 55.7558, "Longitude": 37.6173, "LocationName": "Москва", "IntervalMinutes": 15 },
+  "Weather":   { "City": "Moscow", "LocationName": "Москва", "IntervalMinutes": 15, "TimeZone": "Europe/Moscow" },
   "Traffic":   { "Provider": "Yandex", "IntervalMinutes": 5, "PeakIntervalMinutes": 2,
                  "PeakHours": ["07:00-10:00", "17:00-20:00"] },
   "Telemetry": { "IntervalSeconds": 1, "ProcRoot": "/proc", "SysRoot": "/sys" },
@@ -350,6 +350,6 @@ builder.Services.AddProblemDetails();
 
 ## 9. Тестирование
 
-- **Unit (xUnit):** маппинг Open-Meteo → `WeatherDto`, расчёт `CongestionLevel`, парсинг `/proc/stat`, `/proc/meminfo`, `/proc/uptime` по файлам-фикстурам.
+- **Unit (xUnit):** маппинг wttr.in → `WeatherModel`, расчёт `CongestionLevel`, парсинг `/proc/stat`, `/proc/meminfo`, `/proc/uptime` по файлам-фикстурам.
 - **Integration:** `WebApplicationFactory` + Testcontainers (PostgreSQL) — snapshot-эндпоинт, миграции, fallback на `index.html`, 404 для неизвестного `/api/*`.
 - **SignalR:** тестовый `HubConnection` к `WebApplicationFactory` — проверка, что воркер с фейковым провайдером рассылает событие.

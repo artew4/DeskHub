@@ -49,7 +49,7 @@ features/<name>/
 ### 1.1. Поток данных
 
 ```
-Open-Meteo API ──(HTTP, каждые 10–15 мин)──► Backend WeatherService
+wttr.in ──(HTTPS, каждые 15 мин)──────────►    Backend WeatherService
                                                  │ кэш в PostgreSQL
                                                  ▼
                                    SignalR: WeatherUpdated(WeatherDto)
@@ -61,7 +61,7 @@ REST snapshot (старт / реконнект) ──────────�
                                    WeatherWidget (селекторы)
 ```
 
-- **Клиент никогда не обращается к Open-Meteo напрямую.** Координаты, единицы и таймзона настраиваются на бэкенде.
+- **Клиент никогда не обращается к провайдеру погоды напрямую** (сейчас wttr.in, до 09.10.2026 — Open-Meteo; смена провайдера фронтенд не затронула). Координаты, единицы и таймзона настраиваются на бэкенде.
 - Основной канал — **SignalR-событие `WeatherUpdated`**. REST используется только в составе snapshot.
 - Бэкенд пушит событие только при фактическом изменении данных или по расписанию обновления.
 
@@ -76,7 +76,7 @@ export interface WeatherDto {
   current: {
     temperature: number;           // °C
     apparentTemperature: number;   // °C, «ощущается как»
-    weatherCode: number;           // WMO code (Open-Meteo)
+    weatherCode: number;           // WMO-код (wttr.in-код переводится в эквивалентный WMO)
     isDay: boolean;
     precipitation: number;         // мм за последний час
     precipitationProbability: number; // %, ближайший час

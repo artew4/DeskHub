@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Net.Http.Json;
 using DeskHub.Api.Hubs;
 using DeskHub.Api.Services.Weather;
@@ -7,7 +6,8 @@ using Microsoft.Extensions.Options;
 namespace DeskHub.Api.Workers;
 
 /// <summary>
-/// Раз в OpenMeteo:IntervalMinutes запрашивает прогноз Open-Meteo и рассылает WeatherUpdated.
+/// Раз в Weather:IntervalMinutes запрашивает погоду с wttr.in (https://wttr.in/Moscow?format=j1&amp;lang=ru)
+/// и рассылает WeatherUpdated в прежнем формате WeatherModel.
 /// При ошибке не падает: повторяет запрос с нарастающей задержкой (1, 2, 4… мин, не дольше интервала),
 /// а на экране остаются последние данные — фронтенд сам пометит их устаревшими по updatedAt.
 /// </summary>
@@ -15,7 +15,7 @@ public sealed class WeatherWorker(
     IHttpClientFactory httpClientFactory,
     DashboardNotifier notifier,
     TimeProvider time,
-    IOptions<OpenMeteoOptions> options,
+    IOptions<WeatherOptions> options,
     ILogger<WeatherWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan FirstRetryDelay = TimeSpan.FromMinutes(1);
@@ -24,16 +24,17 @@ public sealed class WeatherWorker(
     {
         var settings = options.Value;
         var interval = TimeSpan.FromMinutes(settings.IntervalMinutes);
+        var tz = TimeZoneInfo.FindSystemTimeZoneById(settings.TimeZone);
         var failures = 0;
 
-        logger.LogInformation("WeatherWorker started: {Location} ({Lat}, {Lon}), interval {Interval}",
-            settings.LocationName, settings.Latitude, settings.Longitude, interval);
+        logger.LogInformation("WeatherWorker started: wttr.in/{City} ({Location}, tz {TimeZone}), interval {Interval}",
+            settings.City, settings.LocationName, tz.Id, interval);
 
         while (!stoppingToken.IsCancellationRequested)
         {
             try
             {
-                await RefreshAsync(settings, stoppingToken);
+                await RefreshAsync(settings, tz, stoppingToken);
                 if (failures > 0) logger.LogInformation("Weather refresh recovered after {Failures} failures", failures);
                 failures = 0;
             }
@@ -63,25 +64,19 @@ public sealed class WeatherWorker(
         }
     }
 
-    private async Task RefreshAsync(OpenMeteoOptions settings, CancellationToken ct)
+    private async Task RefreshAsync(WeatherOptions settings, TimeZoneInfo tz, CancellationToken ct)
     {
-        var client = httpClientFactory.CreateClient(OpenMeteoOptions.HttpClientName);
-        var response = await client.GetFromJsonAsync<OpenMeteoResponse>(BuildRequestUri(settings), ct)
-            ?? throw new InvalidOperationException("Open-Meteo returned an empty body");
+        var client = httpClientFactory.CreateClient(WeatherOptions.HttpClientName);
+        var response = await client.GetFromJsonAsync<WttrResponse>(BuildRequestUri(settings), WttrResponse.JsonOptions, ct)
+            ?? throw new InvalidOperationException("wttr.in returned an empty body");
 
-        var weather = OpenMeteoMapper.ToWeatherModel(response, settings.LocationName, time.GetUtcNow());
+        var weather = WttrMapper.ToWeatherModel(response, settings.LocationName, time.GetUtcNow(), tz);
         await notifier.SendWeatherUpdate(weather, ct);
 
-        logger.LogInformation("Weather updated: {Temperature} °C, {Description}, {Hours} hourly points",
-            weather.Temperature, weather.Description, weather.Hourly.Count);
+        logger.LogInformation("Weather updated: {Temperature} °C, {Description} ({Icon}), {Hours} forecast points",
+            weather.Temperature, weather.Description, weather.Icon, weather.Hourly.Count);
     }
 
-    private const string Fields =
-        "&current=temperature_2m,apparent_temperature,weather_code,precipitation,is_day,uv_index" +
-        "&hourly=temperature_2m,weather_code,is_day,precipitation_probability" +
-        "&timezone=auto&forecast_days=2";
-
-    // InvariantCulture: в ru-RU дробный разделитель — запятая, API её не примет
-    private static string BuildRequestUri(OpenMeteoOptions s) => string.Create(CultureInfo.InvariantCulture,
-        $"v1/forecast?latitude={s.Latitude}&longitude={s.Longitude}{Fields}");
+    /// <summary>«Moscow?format=j1&amp;lang=ru» — JSON с русскими описаниями (lang_ru).</summary>
+    private static string BuildRequestUri(WeatherOptions s) => $"{Uri.EscapeDataString(s.City)}?format=j1&lang=ru";
 }
