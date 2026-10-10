@@ -41,9 +41,16 @@ interface DisplaySettingsState {
   forceLightTheme: boolean
   /** Тёплый полупрозрачный слой поверх всего UI. */
   nightShiftEnabled: boolean
+  /**
+   * Режим «Второй экран ПК» (Spacedesk HTML5 Viewer поверх всего UI). Не сохраняется в localStorage:
+   * после перезагрузки страницы киоск всегда возвращается к дашборду (ПК может быть выключен).
+   */
+  isSpacedeskActive: boolean
   setBrightness: (value: number) => void
   setForceLightTheme: (enabled: boolean) => void
   setNightShiftEnabled: (enabled: boolean) => void
+  openSpacedesk: () => void
+  closeSpacedesk: () => void
 }
 
 /**
@@ -68,4 +75,7 @@ export const useDisplaySettingsStore = create<DisplaySettingsState>((set, get) =
     set({ nightShiftEnabled })
     write(KEYS.nightShiftEnabled, String(nightShiftEnabled))
   },
+  isSpacedeskActive: false,
+  openSpacedesk: () => set({ isSpacedeskActive: true }),
+  closeSpacedesk: () => set({ isSpacedeskActive: false }),
 }))

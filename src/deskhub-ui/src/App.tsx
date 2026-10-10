@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { BrightnessOverlay } from './components/BrightnessOverlay'
 import { NightShiftOverlay } from './components/NightShiftOverlay'
 import { PowerOverlay } from './components/PowerOverlay'
+import { SpacedeskViewer } from './components/SpacedeskViewer'
 import { ScreenCarousel } from './components/ScreenCarousel'
 import { MainScreen } from './features/dashboard/MainScreen'
 import { SystemScreen } from './features/dashboard/SystemScreen'
@@ -32,6 +33,7 @@ function App() {
       <NightShiftOverlay />
       <BrightnessOverlay />
       <PowerOverlay />
+      <SpacedeskViewer />
     </div>
   )
 }

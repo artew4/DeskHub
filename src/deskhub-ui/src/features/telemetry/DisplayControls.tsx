@@ -1,4 +1,4 @@
-import { Moon, Sun } from 'lucide-react'
+import { Monitor, Moon, Sun } from 'lucide-react'
 import { useRef, type KeyboardEvent, type PointerEvent } from 'react'
 import { setSleepMode } from '../../services/signalrConnection'
 import { MAX_BRIGHTNESS, MIN_BRIGHTNESS, useDisplaySettingsStore } from '../../store/useDisplaySettingsStore'
@@ -7,12 +7,13 @@ import { MAX_BRIGHTNESS, MIN_BRIGHTNESS, useDisplaySettingsStore } from '../../s
 const THUMB_PX = 44
 const KEY_STEP = 5
 
-/** Блок управления экраном внизу карточки «Система»: яркость, светлая тема, Night Shift и кнопка сна. */
+/** Блок управления экраном внизу карточки «Система»: яркость, светлая тема, Night Shift, второй экран ПК и кнопка сна. */
 export function DisplayControls() {
   const forceLightTheme = useDisplaySettingsStore((s) => s.forceLightTheme)
   const setForceLightTheme = useDisplaySettingsStore((s) => s.setForceLightTheme)
   const nightShiftEnabled = useDisplaySettingsStore((s) => s.nightShiftEnabled)
   const setNightShiftEnabled = useDisplaySettingsStore((s) => s.setNightShiftEnabled)
+  const openSpacedesk = useDisplaySettingsStore((s) => s.openSpacedesk)
 
   return (
     <div className="mt-4 flex flex-col gap-3 border-t border-fg-muted/20 pt-4">
@@ -31,13 +32,23 @@ export function DisplayControls() {
           onToggle={() => setNightShiftEnabled(!nightShiftEnabled)}
         />
       </div>
-      <button
-        type="button"
-        onClick={setSleepMode}
-        className="flex h-12 items-center justify-center gap-2 rounded-xl bg-surface-2 text-label font-semibold text-fg-primary transition-transform duration-150 ease-kiosk active:scale-[0.97]"
-      >
-        <Moon className="size-5 text-fg-secondary" aria-hidden />В режим сна
-      </button>
+      {/* Нижний ряд: заметная (акцентная) кнопка второго экрана и нейтральная кнопка сна — высота карточки не растёт */}
+      <div className="grid grid-cols-2 gap-3">
+        <button
+          type="button"
+          onClick={openSpacedesk}
+          className="flex h-12 items-center justify-center gap-2 rounded-xl bg-sky-500 text-label font-semibold text-white transition-transform duration-150 ease-kiosk active:scale-[0.97]"
+        >
+          <Monitor className="size-5" aria-hidden />Второй экран ПК
+        </button>
+        <button
+          type="button"
+          onClick={setSleepMode}
+          className="flex h-12 items-center justify-center gap-2 rounded-xl bg-surface-2 text-label font-semibold text-fg-primary transition-transform duration-150 ease-kiosk active:scale-[0.97]"
+        >
+          <Moon className="size-5 text-fg-secondary" aria-hidden />В режим сна
+        </button>
+      </div>
     </div>
   )
 }
