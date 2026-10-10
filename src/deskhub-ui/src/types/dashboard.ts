@@ -13,7 +13,33 @@ export interface WeatherModel {
   precipitation: number
   uvIndex: number
   hourly: HourlyForecast[]
+  /** Восход/закат и фаза Луны (Hero-виджет погоды); null — wttr.in не прислал астрономию */
+  astronomy?: WeatherAstronomy | null
   updatedAt: string
+}
+
+/** Фаза Луны — зеркало enum MoonPhase (Models/WeatherModel.cs), camelCase */
+export type MoonPhase =
+  | 'unknown'
+  | 'newMoon'
+  | 'waxingCrescent'
+  | 'firstQuarter'
+  | 'waxingGibbous'
+  | 'fullMoon'
+  | 'waningGibbous'
+  | 'lastQuarter'
+  | 'waningCrescent'
+
+export interface WeatherAstronomy {
+  /** Восход сегодня, ISO со смещением; null — полярный день/ночь или нет данных */
+  sunrise: string | null
+  /** Закат сегодня */
+  sunset: string | null
+  /** Восход завтра — конец ночной дуги Луны */
+  nextSunrise: string | null
+  moonPhase: MoonPhase
+  /** Освещённая доля диска, % */
+  moonIllumination: number
 }
 
 export interface HourlyForecast {

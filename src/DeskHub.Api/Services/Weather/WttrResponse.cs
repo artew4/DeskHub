@@ -31,9 +31,12 @@ internal sealed record WttrDay(
     [property: JsonPropertyName("astronomy")] List<WttrAstronomy>? Astronomy,
     [property: JsonPropertyName("hourly")] List<WttrHour> Hourly);
 
+/// <summary>Астрономия дня: время — «06:48 AM» (12h, местное), «No sunrise» в полярный день/ночь; освещённость — "0"…"100".</summary>
 internal sealed record WttrAstronomy(
     [property: JsonPropertyName("sunrise")] string Sunrise,
-    [property: JsonPropertyName("sunset")] string Sunset);
+    [property: JsonPropertyName("sunset")] string Sunset,
+    [property: JsonPropertyName("moon_phase")] string? MoonPhase,
+    [property: JsonPropertyName("moon_illumination")] int? MoonIllumination);
 
 /// <summary>Прогноз с шагом 3 часа: Time = "0", "300", … "2100" (часы × 100).</summary>
 internal sealed record WttrHour(

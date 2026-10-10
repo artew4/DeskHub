@@ -2,13 +2,15 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type Pointer
 import { WidgetBoundary } from '../../components/WidgetBoundary'
 import { forceTrafficRefresh, reportTrafficVisible } from '../../services/signalrConnection'
 import { MAIN_SCREEN, useDashboardStore } from '../../store/useDashboardStore'
-import { TamagotchiWidget } from '../tamagotchi/TamagotchiWidget'
+// Кот временно отключён — на его месте Hero-виджет погоды (вернуть: TamagotchiWidget вместо HeroWeatherWidget ниже)
+// import { TamagotchiWidget } from '../tamagotchi/TamagotchiWidget'
+import { HeroWeatherWidget } from '../heroWeather/HeroWeatherWidget'
 import { TrafficWidget } from '../traffic/TrafficWidget'
 import { useTrafficWindow } from '../traffic/useTrafficWindow'
 
-type Slide = 'traffic' | 'cat'
-const SLIDES: Slide[] = ['traffic', 'cat']
-const other = (s: Slide): Slide => (s === 'traffic' ? 'cat' : 'traffic')
+type Slide = 'traffic' | 'weather'
+const SLIDES: Slide[] = ['traffic', 'weather']
+const other = (s: Slide): Slide => (s === 'traffic' ? 'weather' : 'traffic')
 
 /** Свайп длиннее — переключение; быстрый флик — тоже. */
 const SWIPE_THRESHOLD_PX = 45
@@ -16,7 +18,7 @@ const FLICK_VELOCITY = 0.5
 const FLICK_MIN_PX = 20
 /** Сдвиг, после которого жест признаётся вертикальным (или отдаётся горизонтальной карусели экранов). */
 const AXIS_LOCK_PX = 10
-/** Сколько пробки висят вне рабочего окна без касаний, прежде чем вернётся кот. */
+/** Сколько пробки висят вне рабочего окна без касаний, прежде чем вернётся погода. */
 export const TRAFFIC_PEEK_MS = 30_000
 /** Пинг видимости пробок — сервер усыпляет TrafficWorker через 10 мин без пингов. */
 const VISIBILITY_PING_MS = 90_000
@@ -35,17 +37,17 @@ interface Gesture {
 }
 
 /**
- * Левая нижняя ячейка главного экрана: вертикальная мини-карусель «Пробки ↔ Кот».
+ * Левая нижняя ячейка главного экрана: вертикальная мини-карусель «Пробки ↔ Погода» (Hero-виджет; кот временно отключён).
  *
- * - По умолчанию — по времени: Пн–Пт 10:00–13:20 пробки, иначе кот. Смена тайм-окна возвращает дефолт.
+ * - По умолчанию — по времени: Пн–Пт 10:00–13:20 пробки, иначе погода. Смена тайм-окна возвращает дефолт.
  * - Свайп вверх или вниз (> 45 px или флик) переключает виджет — бесконечная лента из двух элементов:
  *   входящий слой всегда подъезжает с той стороны, откуда тянут палец.
- * - Пробки, открытые вручную вне рабочего окна, через 30 с без касаний уезжают обратно к коту.
- *   Кот, открытый вручную в рабочее окно, остаётся до смены окна или следующего свайпа.
+ * - Пробки, открытые вручную вне рабочего окна, через 30 с без касаний уезжают обратно к погоде.
+ *   Погода, открытая вручную в рабочее окно, остаётся до смены окна или следующего свайпа.
  *
  * Анимация — только transform двух абсолютных слоёв (will-change: transform), позиции пишутся напрямую
  * в style через ref: во время свайпа React не перерисовывается. Оба виджета смонтированы постоянно
- * (кот живёт своей жизнью и вне экрана), неактивный — inert.
+ * (погода анимируется и вне экрана), неактивный — inert.
  *
  * Пока пробки видны (ячейка + главный экран + связь), сервер получает пинг ReportTrafficVisible раз в 90 с
  * (и ForceTrafficRefresh, если данные старше 15 мин) — иначе TrafficWorker засыпает и не ходит в Яндекс.
@@ -55,7 +57,7 @@ interface Gesture {
  * и экранная карусель жест не видит; если горизонтальный — отказывается, и жест обрабатывает ScreenCarousel.
  */
 export function BottomLeftCarousel() {
-  const defaultSlide: Slide = useTrafficWindow() ? 'traffic' : 'cat'
+  const defaultSlide: Slide = useTrafficWindow() ? 'traffic' : 'weather'
   const [shown, setShown] = useState<Slide>(defaultSlide)
   // Пробки действительно видны: открыты в ячейке, активен главный экран и есть связь с сервером
   const onMainScreen = useDashboardStore((s) => s.activeScreenIndex === MAIN_SCREEN)
@@ -65,7 +67,7 @@ export function BottomLeftCarousel() {
 
   const shownRef = useRef<Slide>(defaultSlide)
   const defaultRef = useRef<Slide>(defaultSlide)
-  const layers = useRef<Record<Slide, HTMLDivElement | null>>({ traffic: null, cat: null })
+  const layers = useRef<Record<Slide, HTMLDivElement | null>>({ traffic: null, weather: null })
   const gesture = useRef<Gesture | null>(null)
   const peekTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
@@ -101,7 +103,7 @@ export function BottomLeftCarousel() {
     setShown(target)
   }, [])
 
-  // ─── Автовозврат пробок к коту вне рабочего окна ──────────────────────────
+  // ─── Автовозврат пробок к погоде вне рабочего окна ──────────────────────────
   const clearPeek = useCallback(() => {
     clearTimeout(peekTimer.current)
     peekTimer.current = undefined
@@ -109,9 +111,9 @@ export function BottomLeftCarousel() {
 
   const armPeek = useCallback(() => {
     clearPeek()
-    // Таймер — только когда вне рабочего окна (дефолт — кот) показаны пробки
-    if (defaultRef.current === 'cat' && shownRef.current === 'traffic') {
-      peekTimer.current = setTimeout(() => goTo('cat', 1), TRAFFIC_PEEK_MS)
+    // Таймер — только когда вне рабочего окна (дефолт — погода) показаны пробки
+    if (defaultRef.current === 'weather' && shownRef.current === 'traffic') {
+      peekTimer.current = setTimeout(() => goTo('weather', 1), TRAFFIC_PEEK_MS)
     }
   }, [clearPeek, goTo])
 
@@ -216,7 +218,7 @@ export function BottomLeftCarousel() {
           inert={slide !== shown}
           aria-hidden={slide !== shown}
         >
-          <WidgetBoundary name={slide}>{slide === 'traffic' ? <TrafficWidget /> : <TamagotchiWidget />}</WidgetBoundary>
+          <WidgetBoundary name={slide}>{slide === 'traffic' ? <TrafficWidget /> : <HeroWeatherWidget />}</WidgetBoundary>
         </div>
       ))}
 

@@ -105,6 +105,12 @@ public abstract class PeriodicWorker(ILogger logger, TimeProvider time) : Backgr
 > | `precipitation` / `uvIndex` | `precipMM` / `uvIndex` |
 > | `hourly[]` | `weather[0..2].hourly[]` — **шаг 3 ч** (`time` = "0", "300" … "2100", местное время города → `DateTimeOffset` по `Weather:TimeZone`), начиная с текущего трёхчасового блока, 16 точек (2 суток); `precipitationProbability` = max(`chanceofrain`, `chanceofsnow`); иконка — по коду часа и восходу/закату его дня |
 > | `locationName` | `Weather:LocationName` |
+> | `astronomy.sunrise` / `sunset` | `weather[сегодня].astronomy[0].sunrise` / `sunset` → абсолютный `DateTimeOffset` (дата дня + время, смещение `Weather:TimeZone`); `null` — «No sunrise»/«No sunset» (полярный день/ночь) или не разобрано |
+> | `astronomy.nextSunrise` | восход следующего дня ответа (`weather[завтра]`) — конец ночной дуги Луны |
+> | `astronomy.moonPhase` | `moon_phase` («Waxing Crescent») → enum `MoonPhase` (пробелы убираются, регистр не важен; «Third Quarter» = `LastQuarter`; неизвестное — `Unknown`), в JSON — camelCase (`waxingCrescent`) |
+> | `astronomy.moonIllumination` | `moon_illumination` ("0"…"100", строка → int), зажат в 0–100 |
+>
+> **Формат времени астрономии.** wttr.in отдаёт восход/закат в **12-часовом формате** («06:48 AM», «05:45 PM») независимо от `lang`. `WttrMapper.TryParseClock` разбирает строку `DateTime.TryParseExact` с **инвариантной культурой** (AM/PM не зависят от локали сервера/контейнера) и набором форматов `hh:mm tt`, `h:mm tt`, `hh:mmtt`, `h:mmtt`, `HH:mm`, `H:mm` (на случай смены формата — без ведущего нуля, без пробела, 24 ч); строка предварительно приводится к верхнему регистру («am» → «AM»). Время — местное время города, поэтому к дате дня добавляется смещение `Weather:TimeZone` на этот момент (корректно и в дни перехода на летнее время). Тот же разбор используется для `isDay`.
 >
 > Следствие шага 3 ч: фронтенд (`selectForecast`) выбирает часы из того, что есть, поэтому в режиме «Сегодня» бывает 4 слота вместо 5, а «Вечером» — 2–3 (12:00 → 12, 15, 18, 21). Режим «Завтра» (09, 12, 15, 18, 21) — без изменений.
 >

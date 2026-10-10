@@ -57,7 +57,9 @@ while true; do
     --disable-infobars \
     --disable-session-crashed-bubble \
     --disable-crash-reporter \
-    --disable-features=TranslateUI \
+    --disable-web-security \
+    --disable-site-isolation-trials \
+    --disable-features=TranslateUI,IsolateOrigins,site-per-process \
     --disable-pinch \
     --overscroll-history-navigation=0 \
     --password-store=basic \

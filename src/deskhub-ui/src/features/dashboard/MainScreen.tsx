@@ -8,7 +8,7 @@ import { BottomLeftCarousel } from './BottomLeftCarousel'
  * Главный экран (индекс 0 карусели): сетка 12×6 на контентной области 992×568 (p-4, gap-4):
  * колонка 68 px, строка ≈ 81.3 px; ячейка 7×3 ≈ 572×276, 5×3 ≈ 404×276
  * (knowledge/Frontend_react/Feature_Dashboard.md, раздел 2).
- * Левая нижняя ячейка — вертикальная мини-карусель «Пробки ↔ Кот» (BottomLeftCarousel).
+ * Левая нижняя ячейка — вертикальная мини-карусель «Пробки ↔ Погода» (BottomLeftCarousel; Hero-виджет погоды, кот временно отключён).
  */
 export function MainScreen() {
   return (

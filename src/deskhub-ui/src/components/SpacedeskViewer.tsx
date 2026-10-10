@@ -2,8 +2,11 @@ import { X } from 'lucide-react'
 import { useDashboardStore } from '../store/useDashboardStore'
 import { useDisplaySettingsStore } from '../store/useDisplaySettingsStore'
 
-/** Spacedesk HTML5 Viewer на Windows-ПК в домашней сети (Spacedesk Driver на ПК, порт 31100). */
-export const SPACEDESK_URL = 'http://192.168.0.136:31100/'
+/**
+ * Официальный Spacedesk HTML5 Viewer (локальный порт 31100 на ПК разработчики больше не поддерживают).
+ * Адрес ПК с Spacedesk Driver (192.168.0.136) вводится в самом viewer при подключении.
+ */
+export const SPACEDESK_URL = 'http://viewer.spacedesk.net/'
 
 /**
  * Режим «Второй экран ПК»: полноэкранный iframe со Spacedesk поверх всего UI (z-[9999]) — киоск становится
